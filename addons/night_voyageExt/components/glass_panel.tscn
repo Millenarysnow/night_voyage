@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="NVSurfaceStyle" path="res://addons/night_voyageExt/presets/glass.tres" id="1_style"]
+
+[node name="GlassPanel" type="NVGlassPanel"]
+offset_right = 320.0
+offset_bottom = 180.0
+surface_style = ExtResource("1_style")

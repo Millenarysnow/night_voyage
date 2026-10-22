@@ -1,0 +1,26 @@
+**/.idea
+**/.DS_Store
+**/.godot
+
+# CMake / 原生编译缓存与本机二进制；保留 .gdextension 和 Godot 的 .uid 文件。
+/cmake-build-*/
+/build/
+/native/*/bin/
+/addons/night_voyageExt/bin/windows/
+/addons/night_voyageExt/bin/linux/
+/addons/night_voyageExt/bin/macos/
+/addons/night_voyageExt/bin/android/
+/addons/night_voyageExt/bin/ios/
+/addons/night_voyageExt/bin/web/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll.a
+*.import
+
+# 由现有 CMake 下载的 IDE 插件及本地验收输出。
+/addons/rider-plugin/
+/artifacts/

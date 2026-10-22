@@ -1,0 +1,81 @@
+# Use the same minimum as the godot-cpp project
+cmake_minimum_required(VERSION 3.17)
+
+# Silence unused variable warning when specified from toolchain
+if(CMAKE_C_COMPILER)
+endif()
+
+# Set universal architecture for macOS builds (matches SCons default behavior)
+if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build architectures for macOS" FORCE)
+endif()
+
+set(LIBNAME "night_voyageExt") # "The name of the library"
+set(GODOT_PROJECT_DIR "../..")
+
+# Make sure all the dependencies are satisfied
+find_package(Python3 3.4 REQUIRED)
+
+# Create the gen directory at configure time so IDEs can see generated headers immediately after generate_bindings
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/godot-cpp/gen/include")
+
+# Add godot-cpp's module path and include the exported functions.
+# This is made available for documentation generation
+set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${godot-cpp_SOURCE_DIR}/cmake")
+include(GodotCPPModule)
+
+# The godot-cpp target has some of useful properties attached that can be retrieved like so.
+get_target_property(GODOTCPP_SUFFIX godot::cpp GODOTCPP_SUFFIX)
+get_target_property(GODOTCPP_PLATFORM godot::cpp GODOTCPP_PLATFORM)
+
+# Remove .universal from suffix to match SCons behavior
+string(REPLACE ".universal" "" GODOTCPP_SUFFIX "${GODOTCPP_SUFFIX}")
+
+# Now we can specify our own project which will inherit any global cmake properties or variables that have been defined.
+project(night_voyageExt
+    VERSION 1.0
+    DESCRIPTION ""
+    LANGUAGES CXX
+)
+
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.h")
+add_library(${LIBNAME} SHARED)
+target_sources(${LIBNAME}
+        PRIVATE
+        ${SOURCES}
+)
+
+target_link_libraries(${LIBNAME} PRIVATE godot-cpp)
+
+# Require at least C++17 for this target
+set_property(TARGET ${LIBNAME} PROPERTY CXX_STANDARD 17)
+
+# 源码和文档统一采用 UTF-8，确保 MSVC 正确读取中文注释与演示文本。
+if(MSVC)
+    target_compile_options(${LIBNAME} PRIVATE /utf-8)
+else()
+    target_compile_options(${LIBNAME} PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+set_target_properties(${LIBNAME}
+    PROPERTIES
+    # The generator expression here prevents msvc from adding a Debug or Release subdir.
+    RUNTIME_OUTPUT_DIRECTORY "$<1:${PROJECT_SOURCE_DIR}/bin/${GODOTCPP_PLATFORM}>"
+
+    OUTPUT_NAME "${LIBNAME}${GODOTCPP_SUFFIX}"
+)
+
+# Match SCons behavior: $SHLIBPREFIX is empty on Windows, "lib" elsewhere
+if(WIN32)
+    set_target_properties(${LIBNAME} PROPERTIES PREFIX "")
+else()
+    set_target_properties(${LIBNAME} PROPERTIES PREFIX "lib")
+endif()
+
+set(GODOT_PROJECT_BINARY_DIR "${PROJECT_SOURCE_DIR}/${GODOT_PROJECT_DIR}/addons/night_voyageExt/bin/${GODOTCPP_PLATFORM}")
+
+add_custom_command(TARGET ${LIBNAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${GODOT_PROJECT_BINARY_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E echo "POST_BUILD: Copying $<TARGET_FILE:${LIBNAME}> to ${GODOT_PROJECT_BINARY_DIR}/$<TARGET_FILE_NAME:${LIBNAME}>"
+    COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:${LIBNAME}>" "${GODOT_PROJECT_BINARY_DIR}/$<TARGET_FILE_NAME:${LIBNAME}>"
+)

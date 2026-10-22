@@ -1,0 +1,12 @@
+[gd_resource type="NVSurfaceStyle" format=3]
+
+[resource]
+corner_radii = Vector4(24, 8, 24, 8)
+fill_color = Color(0.18, 0.24, 0.28, 1)
+border_color = Color(0.52, 0.65, 0.68, 0.3)
+shadow_color = Color(0, 0, 0, 0.75)
+shadow_offset = Vector2(0, 16)
+shadow_softness = 12.0
+inner_shadow_color = Color(0, 0, 0, 0.3)
+inner_shadow_offset = Vector2(0, 4)
+inner_shadow_softness = 7.0

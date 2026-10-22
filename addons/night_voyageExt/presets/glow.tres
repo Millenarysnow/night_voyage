@@ -1,0 +1,11 @@
+[gd_resource type="NVSurfaceStyle" format=3]
+
+[resource]
+corner_radii = Vector4(18, 18, 18, 18)
+fill_color = Color(0.08, 0.18, 0.19, 1)
+border_color = Color(0.3, 0.95, 0.77, 0.9)
+border_width = 1.5
+shadow_color = Color(0, 0, 0, 0)
+glow_color = Color(0.08, 0.95, 0.68, 0.65)
+glow_softness = 14.0
+glow_spread = 3.0

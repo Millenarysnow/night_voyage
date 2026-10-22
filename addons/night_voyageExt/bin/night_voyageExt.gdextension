@@ -1,0 +1,40 @@
+[configuration]
+
+entry_symbol = "gdextension_init"
+compatibility_minimum = "4.8"
+reloadable = false
+
+[libraries]
+
+macos.debug = "./macos/libnight_voyageExt.macos.template_debug.dylib"
+macos.release = "./macos/libnight_voyageExt.macos.template_release.dylib"
+
+ios.arm64.debug = "./ios/libnight_voyageExt.ios.template_debug.arm64.dylib"
+ios.arm64.release = "./ios/libnight_voyageExt.ios.template_release.arm64.dylib"
+
+windows.x86_32.debug = "./windows/night_voyageExt.windows.template_debug.x86_32.dll"
+windows.x86_32.release = "./windows/night_voyageExt.windows.template_release.x86_32.dll"
+
+windows.x86_64.debug = "./windows/night_voyageExt.windows.template_debug.x86_64.dll"
+windows.x86_64.release = "./windows/night_voyageExt.windows.template_release.x86_64.dll"
+
+windows.arm64.debug = "./windows/night_voyageExt.windows.template_debug.arm64.dll"
+windows.arm64.release = "./windows/night_voyageExt.windows.template_release.arm64.dll"
+
+linux.x86_64.debug = "./linux/libnight_voyageExt.linux.template_debug.x86_64.so"
+linux.x86_64.release = "./linux/libnight_voyageExt.linux.template_release.x86_64.so"
+
+linux.arm64.debug = "./linux/libnight_voyageExt.linux.template_debug.arm64.so"
+linux.arm64.release = "./linux/libnight_voyageExt.linux.template_release.arm64.so"
+
+linux.rv64.debug = "./linux/libnight_voyageExt.linux.template_debug.rv64.so"
+linux.rv64.release = "./linux/libnight_voyageExt.linux.template_release.rv64.so"
+
+android.x86_64.debug = "./android/libnight_voyageExt.android.template_debug.x86_64.so"
+android.x86_64.release = "./android/libnight_voyageExt.android.template_release.x86_64.so"
+
+android.arm64.debug = "./android/libnight_voyageExt.android.template_debug.arm64.so"
+android.arm64.release = "./android/libnight_voyageExt.android.template_release.arm64.so"
+
+web.wasm32.debug = "./web/libnight_voyageExt.web.template_debug.wasm32.nothreads.wasm"
+web.wasm32.release = "./web/libnight_voyageExt.web.template_release.wasm32.nothreads.wasm"

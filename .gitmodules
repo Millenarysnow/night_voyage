@@ -1,0 +1,4 @@
+[submodule "native/night_voyageExt/godot-cpp"]
+	path = native/night_voyageExt/godot-cpp
+	url = https://github.com/godotengine/godot-cpp
+	branch = master
