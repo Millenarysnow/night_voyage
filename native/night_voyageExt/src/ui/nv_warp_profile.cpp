@@ -65,7 +65,11 @@ void NVWarpProfile::on_map_changed() {
 	emit_changed();
 }
 
-void NVWarpProfile::refresh_map_cache() { rebuild_map_cache(); }
+void NVWarpProfile::refresh_map_cache() {
+	rebuild_map_cache();
+	// 显式刷新会替换 GPU 采样纹理，通知屏幕节点更新 Shader 参数。
+	emit_changed();
+}
 
 void NVWarpProfile::rebuild_map_cache() {
 	cached_map_size = Vector2i();

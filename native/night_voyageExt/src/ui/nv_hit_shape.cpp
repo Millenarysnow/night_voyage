@@ -77,7 +77,11 @@ void NVHitShape::on_mask_changed() {
 	emit_changed();
 }
 
-void NVHitShape::refresh_alpha_cache() { rebuild_alpha_cache(); }
+void NVHitShape::refresh_alpha_cache() {
+	rebuild_alpha_cache();
+	// sampling_mask 是新建的 GPU 资源；显式刷新也必须通知所有使用者重新绑定材质。
+	emit_changed();
+}
 
 void NVHitShape::rebuild_alpha_cache() {
 	cached_alpha.clear();

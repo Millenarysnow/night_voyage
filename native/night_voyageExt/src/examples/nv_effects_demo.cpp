@@ -351,6 +351,33 @@ void NVEffectsDemo::inject_pointer_click(Vector2 p_position) {
 	Input::get_singleton()->parse_input_event(release);
 }
 
+void NVEffectsDemo::inject_pointer_drag_outside(Vector2 p_start, Vector2 p_end) {
+	Ref<InputEventMouseMotion> move_to_start;
+	move_to_start.instantiate();
+	move_to_start->set_position(p_start);
+	Input::get_singleton()->parse_input_event(move_to_start);
+
+	Ref<InputEventMouseButton> press;
+	press.instantiate();
+	press->set_position(p_start);
+	press->set_button_index(MouseButton::MOUSE_BUTTON_LEFT);
+	press->set_pressed(true);
+	Input::get_singleton()->parse_input_event(press);
+
+	Ref<InputEventMouseMotion> drag;
+	drag.instantiate();
+	drag->set_position(p_end);
+	drag->set_relative(p_end - p_start);
+	drag->set_button_mask(1);
+	Input::get_singleton()->parse_input_event(drag);
+
+	Ref<InputEventMouseButton> release;
+	release.instantiate();
+	release->set_position(p_end);
+	release->set_button_index(MouseButton::MOUSE_BUTTON_LEFT);
+	Input::get_singleton()->parse_input_event(release);
+}
+
 void NVEffectsDemo::validate_pipeline_pixels() {
 	// 只在自动验证场景执行同步 GPU 读回；运行时效果组件不读取渲染结果。
 	Ref<Image> image = get_viewport()->get_texture()->get_image();
@@ -411,8 +438,12 @@ void NVEffectsDemo::process_pipeline_validation() {
 		inject_pointer_click(clip_viewport->get_global_transform_with_canvas().xform(Vector2(2, 2)));
 		inject_pointer_click(alpha_clip_viewport->get_global_transform_with_canvas().xform(Vector2(82, 45)));
 		inject_pointer_click(alpha_clip_viewport->get_global_transform_with_canvas().xform(Vector2(82, 82)));
+		inject_pointer_drag_outside(
+			screen_effect->get_global_transform_with_canvas().xform(display_position),
+			screen_effect->get_global_transform_with_canvas().xform(Vector2(1, 1)));
 	} else if (frame == 28) {
 		check(screen_button_count == 1, "warped screen click reaches the displayed button and edge is rejected");
+		check(!screen_test_button->is_pressed(), "dragging beyond warped edge still releases the child button");
 		check(clip_button_count == 1, "rounded hit shape accepts its center and rejects the clipped corner");
 		check(alpha_button_count == 1, "alpha hit mask accepts the ring and rejects its transparent hole");
 	} else if (frame == 38) {

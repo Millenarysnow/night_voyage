@@ -161,10 +161,7 @@ void NVScreenEffectViewport::_gui_input(const Ref<InputEvent> &p_event) {
 	}
 
 	const Vector2 source_position = warp_profile->map_display_to_content(display_position, get_size());
-	if (!warp_profile->covers_display_point(display_position, get_size())) {
-		accept_event();
-		return;
-	}
+	// 即使映射落到画面外也转发事件，使子视口能收到拖拽中的释放并清除按压状态。
 	// clone+xformed_by 避免修改主 Viewport 的原始事件；平移量与输出 UV 的采样偏移一致。
 	Transform2D translation;
 	translation.set_origin(source_position - display_position);

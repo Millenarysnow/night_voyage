@@ -57,6 +57,7 @@ class NVEffectsDemo : public Control {
 	void on_pipeline_clip_pressed();
 	void on_pipeline_alpha_pressed();
 	void inject_pointer_click(Vector2 p_position);
+	void inject_pointer_drag_outside(Vector2 p_start, Vector2 p_end);
 	static Ref<ImageTexture> make_contour_texture();
 	static Ref<ImageTexture> make_footage_texture();
 	static Ref<ImageTexture> make_displacement_texture();
