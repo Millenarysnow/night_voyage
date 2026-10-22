@@ -29,3 +29,5 @@ night_voyage/
 2. Build: `cmake --build cmake-build-debug`
 
 The compiled library is copied to `addons/night_voyageExt/bin/` by CMake after each build.
+
+See [addons/night_voyageExt/README.md](addons/night_voyageExt/README.md) for the reusable UI effects, Godot scene setup, performance notes, and GPU-backed validation commands.

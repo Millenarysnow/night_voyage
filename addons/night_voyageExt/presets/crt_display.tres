@@ -1,0 +1,19 @@
+[gd_resource type="NVAnalogProfile" format=3]
+
+[resource]
+scanline_strength = 0.16
+scanline_period = 3.0
+grain_strength = 0.035
+grain_scale = 1.0
+grain_speed = 8.0
+vignette_strength = 0.34
+reflection_color = Color(0.7, 0.84, 1, 0.055)
+reflection_center = Vector2(0.22, 0)
+reflection_radius = Vector2(0.62, 0.46)
+rolling_strength = 0.035
+rolling_speed = 0.105
+rolling_width = 0.09
+flicker_strength = 0.018
+flicker_frequency = 1.4
+motion_enabled = true
+overlay_blend = true

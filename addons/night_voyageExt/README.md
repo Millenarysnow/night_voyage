@@ -1,12 +1,14 @@
 # Night Voyage 原生 UI 效果组件
 
-同一个 GDExtension addon 提供毛玻璃、圆角表面、外/内阴影、光晕，以及按纹理透明轮廓生成的柔和投影。运行时代码使用 **C++17 + CanvasItem Shader**，没有新增 GDScript 或 C#，保留原有 `ExampleClass`。
+同一个 GDExtension addon 提供毛玻璃、圆角表面、外/内阴影、光晕、透明轮廓投影、CRT 位移与显示器信号效果、监控画面调色，以及圆角/Alpha 裁切和对应的精确命中。运行时代码使用 **C++17 + CanvasItem Shader**，没有新增 GDScript 或 C#，保留原有 `ExampleClass`。
 
 当前绑定 Godot **4.8** API。本机验证版本：`4.8.beta.custom_build.679066724`，Windows x86_64 / GL Compatibility / RTX 4060 Ti。其他小版本需要匹配 godot-cpp API 后重新编译，不能直接声称兼容 4.6。
 
 ## 先看效果
 
 打开 `examples/effects_demo.tscn`，运行当前场景（F6）。场景不替换原来的 `main.tscn`。上方展示玻璃内外的栅格对照、叠放玻璃和清晰的前景文字，下方展示阴影、光晕与中间镂空的 Alpha 投影；底部滑块可以调节模糊。
+
+同一个场景还提供显示效果专用演示，可从命令行加 `-- --nv-pipeline-demo` 运行，查看 CRT 屏幕变形、监控图像处理和形状裁切。添加 `-- --nv-pipeline-test` 会在 GL Compatibility 实际渲染后端检查 GPU 像素，并向变形屏幕、圆角区域和 Alpha 环注入鼠标点击，验证命中范围与显示形状一致。
 
 演示由原生 `NVEffectsDemo` 在运行时搭建，所以编辑器里的演示根场景是空的；**实际组件自身支持编辑器预览**。在编辑器中摆放时，使用下列原生节点，或 `components/` 下的四个可实例化场景。
 
@@ -16,18 +18,31 @@
 | `NVGlassPanel : NVSurface` | 背景模糊、染色、饱和度、亮度 | 包含同样的表面效果，子项的文字/图标保持清晰 |
 | `NVAlphaShadow : Control` | 依据 `Texture2D` 的 Alpha 生成投影 | 可同时显示原图，也可只显示投影；彩色阴影可作为轮廓光晕 |
 | `NVSurfaceStyle : Resource` | 多节点共享的样式 | 保存为 `.tres`，与节点及业务逻辑分离 |
+| `NVScreenEffectViewport : NVEffectViewport` | 对整组 UI 做显示器变形、扫描线、噪点、暗角、反光、滚动亮带和闪烁 | 将游戏/桌面 UI 放在它的 `Content` 下；鼠标、触摸坐标会按画面映射到内容 |
+| `NVFootageEffect : Control` | 单张纹理或 ViewportTexture 的调色和信号效果 | 接收监控画面的 Texture2D；不会处理其 Control 子项 |
+| `NVClipViewport : NVEffectViewport` | 对一组 UI 做圆角或 Alpha 遮罩裁切 | 用同一个 `NVHitShape` 驱动显示裁切与鼠标命中 |
+| `NVWarpProfile / NVAnalogProfile : Resource` | 共享位移场和模拟显示参数 | 分别配置径向/贴图位移，与调色、扫描线、噪点等参数；可存为 `.tres` |
+| `NVHitShape : Resource` | 圆角矩形解析命中或 Alpha 遮罩命中 | 可在多个裁切容器之间共享形状；默认容差为 0 |
 
 用 UE 的经验理解：`Control` 对应自定义 UI 控件，`.tscn` 对应可嵌套的 Widget 组合，`.tres` 对应共享的样式资产。底层效果合并到一次表面绘制中，无需给每个边框、阴影分别增加一个渲染节点。
 
 ## 接入自己的 UI
 
-1. 在创建节点窗口搜索 `NVGlassPanel` / `NVSurface` / `NVAlphaShadow`，或实例化 `components/*.tscn`。
+1. 在创建节点窗口搜索 `NVGlassPanel` / `NVSurface` / `NVAlphaShadow` / `NVScreenEffectViewport` / `NVFootageEffect` / `NVClipViewport`，或实例化 `components/*.tscn`。
 2. 表面的 `Surface Style` 指向一个 `NVSurfaceStyle`。可以复用 `presets/` 下三份 `.tres`，也可新建样式。未指定样式时，进入场景后会创建独立默认资源。
 3. 在表面下面放 `MarginContainer`、`VBoxContainer`、`Label`、`Button` 等普通节点，配置锚点与边距。表面本身不是 `Container`，不会自动安排子节点，也不从内容推导最小尺寸；在外层 Container 中使用时设置 `custom_minimum_size` 和尺寸标志。
 4. 共享样式会同步更新所有使用者。只改一个实例时，先在 Inspector 中把资源设为独立副本。
 5. Alpha 投影的 `Texture` 需要带透明通道，并设置 Control 尺寸。图片会拉伸到整个 Control；保留比例可在外面放 `AspectRatioContainer`。`Show Source=false` 时只显示投影，便于自己叠放原图。
+6. 完整画面需要 CRT 效果时，把主界面控件放到 `NVScreenEffectViewport/Content`，用 `Warp Profile` 与 `Analog Profile` 控制变形和显示质感。监控视频单独放入自己的 SubViewport，再把其 `ViewportTexture` 交给 `NVFootageEffect`。
+7. 对子 UI 做裁切时，把按钮、文字等放到 `NVClipViewport/Content`，将 `Hit Shape` 资源设为圆角矩形或 Alpha 遮罩。Alpha 遮罩建议使用静态带 Alpha 的 `Texture2D`；内容纹理与形状资源分别决定画面和点击区域。
 
 默认鼠标策略：表面为 `PASS`，Alpha 投影为 `IGNORE`，子节点继续使用原生输入、焦点与导航。阴影扩展的是绘制范围，**不会扩大布局或鼠标命中范围**。父容器若开启 `clip_contents`，外扩阴影/光晕也会被裁掉。圆角只作用于自身表面，**不会把整棵子 UI 按圆角裁剪**。
+
+`NVHitShape` 的圆角命中使用与 `NVSurface` 同序的四角半径和圆角距离场，直接检查光标落点，不再用统一内缩的矩形近似。`hit_slop` 可用于圆角边缘的局部容差；默认 0 时，落在圆角曲线之外的点不会命中，也不会扩大 Control 的布局矩形。Alpha 形状则用 `alpha_threshold` 判断遮罩不透明度。CPU 命中缓存只在资源变化或调用 `refresh_alpha_cache()` 时重建，不会在鼠标移动中读取 GPU。
+
+`NVWarpProfile` 的径向弯曲和 RG 位移贴图以“显示坐标到内容采样坐标”定义映射。CRT 节点把同一映射交给 Shader 和鼠标/触摸输入反算。位移贴图按最长边最多 512 像素生成 CPU/GPU 共用的采样图；Alpha 遮罩最多 1024 像素。这样限制命中缓存并让两端采样一致。贴图更新时自动重建；动态 ViewportTexture 通常没有可读的 CPU 图像，不适合作为需要精确输入反算的位移场或 Alpha 遮罩。
+
+`NVAnalogProfile` 可同时供屏幕和监控画面使用：亮度/对比度/饱和度、扫描线、颗粒、暗角、镜面反光、滚动亮带和轻微闪烁都合成在一次 CanvasItem 绘制中。动态层直接使用 Shader `TIME`；关闭 `motion_enabled` 后噪点固定且闪烁/亮带停止。`NVFootageEffect` 的采样 UV 覆盖整块控件，素材会拉伸填满；需要保持长宽比时，在外部用 `AspectRatioContainer`。
 
 ## 参数与单位
 
@@ -70,6 +85,9 @@
 - 圆角、填充、边框、内外阴影、光晕由一个扩展四边形的 SDF Shader 合成，无贴图卷积，无额外离屏 Viewport；关闭效果跳过对应分支。
 - 玻璃复用 Godot GPU 屏幕 mip，默认一次采样。实际成本取决于捕获面积、面板数量、重叠和屏幕分辨率，**使用 Shader 本身不代表一定更快**。
 - Alpha 投影用两个低分辨率 `SubViewport` 分别横向/纵向模糊，每步每像素 25 次 Alpha 读取。仅尺寸、纹理、半径、缓存设置变化时重建；同帧多次修改合并。完成后两个 Viewport 停止更新并断开帧回调，最终显示层读取一次缓存，可选再读取一次原图。
+- CRT 与裁切组件各将子 UI 合成到一个透明 `SubViewport`，再用单次 Shader 绘制做显示变形或遮罩；不可见时由 `UPDATE_WHEN_PARENT_VISIBLE` 暂停离屏重绘。它们适合需要整组裁切/处理的内容，不应为了静态单图增加 Viewport。
+- CRT 输入反算通过预缓存位移场的 CPU 双线性采样完成，不在输入事件期间读回 GPU。CPU 缓存上限同时约束了 GPU 使用的采样图，确保点击与显示使用同一张图。
+- 监控画面效果单次采样底图并一次合成所有模拟层，不创建额外中间纹理。若启用动态颗粒、亮带或闪烁，着色器会持续变化；固定监控可关闭 `motion_enabled`。
 - 运行时组件不执行 `_process` 轮询，不读回 GPU，不在 CPU 逐像素生成投影。演示的测试图生成和截图读回仅用于演示/验证。
 - 两个 RGBA8 缓存的基础纹理开销约 `宽 × 高 × 4 × 2` 字节，不含后端附加分配；两张 256² 约 0.5 MiB，两张 1024² 约 8 MiB。
 - 大半径会增大透明绘制留白和过度绘制。批量装饰优先用小半径、共享背景、较低缓存比例，并隐藏不可见节点。
@@ -103,6 +121,7 @@ cmake --build cmake-build-release --target night_voyageExt --parallel 8
 ```powershell
 godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-self-test
 godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-capture
+godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-pipeline-test
 ```
 
-验证包括：模糊对比度和亮度、前景清晰、圆角裁形、阴影/光晕外扩、Alpha 空洞/留白、平移/旋转/缩放/窗口拉伸、局部叠放/共享背景，以及缓存合并、复用、纹理失效、空纹理和零半径恢复、大控件/大半径的缓存尺寸上限、离开场景树后重新加入。成功退出码为 0，截图在 Git 忽略的 `artifacts/`。未承诺跨设备帧率，未验证移动/Web 导出。
+`--nv-self-test` 验证毛玻璃、表面、Alpha 投影与缓存生命周期；`--nv-pipeline-test` 验证 CRT/监控/裁切像素和变形、圆角、Alpha 命中。成功退出码为 0，截图在 Git 忽略的 `artifacts/`。未承诺跨设备帧率，未验证移动/Web 导出。

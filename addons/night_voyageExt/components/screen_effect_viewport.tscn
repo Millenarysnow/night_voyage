@@ -1,0 +1,22 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="NVWarpProfile" path="res://addons/night_voyageExt/presets/crt_warp.tres" id="1_warp"]
+[ext_resource type="NVAnalogProfile" path="res://addons/night_voyageExt/presets/crt_display.tres" id="2_display"]
+
+[node name="CRTScreen" type="NVScreenEffectViewport"]
+warp_profile = ExtResource("1_warp")
+analog_profile = ExtResource("2_display")
+
+[node name="ContentViewport" type="SubViewport" parent="."]
+size = Vector2i(640, 360)
+transparent_bg = true
+disable_3d = true
+render_target_update_mode = 4
+
+[node name="Content" type="Control" parent="ContentViewport"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

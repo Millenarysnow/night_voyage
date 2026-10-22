@@ -1,0 +1,22 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="NVHitShape" id="rounded_hit"]
+corner_radii = Vector4(28, 28, 28, 28)
+
+[node name="RoundedClip" type="NVClipViewport"]
+custom_minimum_size = Vector2(320, 180)
+hit_shape = SubResource("rounded_hit")
+
+[node name="ContentViewport" type="SubViewport" parent="."]
+size = Vector2i(320, 180)
+transparent_bg = true
+disable_3d = true
+render_target_update_mode = 4
+
+[node name="Content" type="Control" parent="ContentViewport"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

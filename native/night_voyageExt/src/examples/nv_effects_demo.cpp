@@ -6,6 +6,9 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/h_slider.hpp>
 #include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/input.hpp>
+#include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/resource_loader.hpp>
 #include <godot_cpp/classes/scene_tree.hpp>
@@ -22,14 +25,18 @@ void NVEffectsDemo::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("_blur_changed", "value"), &NVEffectsDemo::on_blur_changed);
 	ClassDB::bind_method(D_METHOD("_quality_toggled", "enabled"), &NVEffectsDemo::on_quality_toggled);
 	ClassDB::bind_method(D_METHOD("_shadow_changed", "value"), &NVEffectsDemo::on_shadow_changed);
+	ClassDB::bind_method(D_METHOD("_on_pipeline_screen_pressed"), &NVEffectsDemo::on_pipeline_screen_pressed);
+	ClassDB::bind_method(D_METHOD("_on_pipeline_clip_pressed"), &NVEffectsDemo::on_pipeline_clip_pressed);
+	ClassDB::bind_method(D_METHOD("_on_pipeline_alpha_pressed"), &NVEffectsDemo::on_pipeline_alpha_pressed);
 }
 
 Label *NVEffectsDemo::add_label(Node *p_parent, Vector2 p_position, Vector2 p_size,
-	const String &p_text, int p_font_size, Color p_color) {
+	const char *p_text, int p_font_size, Color p_color) {
 	Label *label = memnew(Label);
 	label->set_position(p_position);
 	label->set_size(p_size);
-	label->set_text(p_text);
+	// godot-cpp 的窄字串构造兼容 ASCII；中文界面文字必须明确按 UTF-8 解码。
+	label->set_text(String::utf8(p_text));
 	label->add_theme_font_size_override("font_size", p_font_size);
 	label->add_theme_color_override("font_color", p_color);
 	label->set_mouse_filter(MOUSE_FILTER_IGNORE);
@@ -53,12 +60,57 @@ Ref<ImageTexture> NVEffectsDemo::make_contour_texture() {
 	return ImageTexture::create_from_image(image);
 }
 
+Ref<ImageTexture> NVEffectsDemo::make_footage_texture() {
+	// 用可辨识的彩色测试条模拟监控源；只在演示初始化时生成，不进入运行时组件。
+	Ref<Image> image = Image::create_empty(256, 144, false, Image::FORMAT_RGBA8);
+	for (int y = 0; y < 144; ++y) {
+		for (int x = 0; x < 256; ++x) {
+			Color color = x < 128 ? Color(0.2, 0.62, 0.9, 1.0) : Color(0.9, 0.34, 0.18, 1.0);
+			if ((y / 6) % 2 == 1) { color = color.darkened(0.12); }
+			image->set_pixel(x, y, color);
+		}
+	}
+	return ImageTexture::create_from_image(image);
+}
+
+Ref<ImageTexture> NVEffectsDemo::make_ring_mask_texture() {
+	// 环形 Alpha 同时验证裁切空洞与 CPU 命中遮罩；纹理生成仅用于演示夹具。
+	Ref<Image> image = Image::create_empty(128, 128, false, Image::FORMAT_RGBA8);
+	for (int y = 0; y < 128; ++y) {
+		for (int x = 0; x < 128; ++x) {
+			const double dx = x + 0.5 - 64.0;
+			const double dy = y + 0.5 - 64.0;
+			const double radius = std::sqrt(dx * dx + dy * dy);
+			const double alpha = radius >= 25.0 && radius <= 59.0 ? 1.0 : 0.0;
+			image->set_pixel(x, y, Color(0.28, 0.78, 0.82, alpha));
+		}
+	}
+	return ImageTexture::create_from_image(image);
+}
+
+Ref<ImageTexture> NVEffectsDemo::make_displacement_texture() {
+	// 单次生成平滑、可复现的 RG 位移场，覆盖 CPU 输入反算与 GPU 双线性采样路径。
+	Ref<Image> image = Image::create_empty(128, 96, false, Image::FORMAT_RGBA8);
+	for (int y = 0; y < 96; ++y) {
+		for (int x = 0; x < 128; ++x) {
+			const double u = (x + 0.5) / 128.0;
+			const double v = (y + 0.5) / 96.0;
+			const double red = 0.5 + 0.34 * std::sin(v * 6.28318530718 * 2.0 + u * 2.2);
+			const double green = 0.5 + 0.28 * std::sin(u * 6.28318530718 * 1.5 - v * 1.7);
+			image->set_pixel(x, y, Color(red, green, 0.5, 1.0));
+		}
+	}
+	return ImageTexture::create_from_image(image);
+}
+
 void NVEffectsDemo::_ready() {
 	// 在编辑器里不创建运行时测试节点，避免编辑器加载场景就改窗口或执行测试。
 	if (Engine::get_singleton()->is_editor_hint()) { set_process(false); return; }
 	const PackedStringArray args = OS::get_singleton()->get_cmdline_user_args();
 	validation = args.has("--nv-self-test");
 	capture = args.has("--nv-capture");
+	pipeline_validation = args.has("--nv-pipeline-test");
+	pipeline_demo = pipeline_validation || args.has("--nv-pipeline-demo");
 	if (validation) {
 #ifdef DEBUG_ENABLED
 		UtilityFunctions::print("NV extension build: template_debug");
@@ -66,15 +118,20 @@ void NVEffectsDemo::_ready() {
 		UtilityFunctions::print("NV extension build: template_release");
 #endif
 	}
-	const Vector2i size = validation ? Vector2i(768, 560) : Vector2i(1280, 800);
+	const Vector2i size = validation ? Vector2i(768, 560) :
+		(pipeline_demo ? Vector2i(1120, 760) : Vector2i(1280, 800));
 	get_window()->set_size(size);
 	get_window()->set_content_scale_size(size);
 	get_window()->set_content_scale_mode(Window::CONTENT_SCALE_MODE_CANVAS_ITEMS);
-	get_window()->set_title(validation ? "Night Voyage | GPU validation" : "Night Voyage | Native UI Effects");
+	get_window()->set_title(validation ? "Night Voyage | GPU validation" :
+		(pipeline_validation ? "Night Voyage | Display pipeline test" :
+			(pipeline_demo ? "Night Voyage | Display pipeline" : "Night Voyage | Native UI Effects")));
 	set_size(Vector2(size));
 	contour_texture = make_contour_texture();
-	if (validation) { build_validation(); } else { build_demo(); }
-	set_process(validation || capture);
+	if (validation) { build_validation(); }
+	else if (pipeline_demo) { build_pipeline_demo(pipeline_validation); }
+	else { build_demo(); }
+	set_process(validation || capture || pipeline_validation);
 	queue_redraw();
 }
 
@@ -153,6 +210,217 @@ void NVEffectsDemo::on_blur_changed(double p_value) {
 void NVEffectsDemo::on_quality_toggled(bool p_enabled) { glass->set_high_quality(p_enabled); }
 void NVEffectsDemo::on_shadow_changed(double p_value) { alpha_shadow->set_blur_radius(p_value); }
 
+void NVEffectsDemo::build_pipeline_demo(bool p_validation) {
+	add_label(this, Vector2(32, 16), Vector2(1056, 34), "显示效果组件 / DISPLAY PIPELINE", 26);
+	add_label(this, Vector2(32, 48), Vector2(1056, 24),
+		p_validation ? "GPU 渲染、裁切边缘与实际按钮命中验证" : "CRT 屏幕 · 监控信号 · 形状裁切与命中", 15,
+		Color(0.55, 0.74, 0.78));
+	add_label(this, Vector2(32, 74), Vector2(540, 24), "01  CRT 屏幕扭曲 + 模拟显示器", 16,
+		Color(0.6, 0.82, 0.84));
+	add_label(this, Vector2(610, 74), Vector2(454, 24), "02  独立监控画面调色", 16,
+		Color(0.82, 0.72, 0.5));
+	add_label(this, Vector2(610, 386), Vector2(260, 24), "03  圆角裁切 + 精确命中", 16,
+		Color(0.6, 0.82, 0.84));
+	add_label(this, Vector2(900, 386), Vector2(180, 24), "04  Alpha 形状裁切", 16,
+		Color(0.6, 0.82, 0.84));
+
+	// CRT 作为完整画布层组合径向位移、扫描线、暗角与信号扰动。
+	screen_effect = memnew(NVScreenEffectViewport);
+	screen_effect->set_position(Vector2(32, 100));
+	screen_effect->set_size(Vector2(540, 304));
+	Ref<NVWarpProfile> warp = ResourceLoader::get_singleton()->load(
+		"res://addons/night_voyageExt/presets/crt_warp.tres");
+	warp->set_displacement_map(make_displacement_texture());
+	warp->set_displacement_scale_px(Vector2(12, 9));
+	Ref<NVAnalogProfile> display_profile = ResourceLoader::get_singleton()->load(
+		"res://addons/night_voyageExt/presets/crt_display.tres");
+	screen_effect->set_warp_profile(warp);
+	screen_effect->set_analog_profile(display_profile);
+	add_child(screen_effect);
+	Control *screen_root = screen_effect->get_content_root();
+	auto add_rect = [](Control *p_parent, Vector2 p_position, Vector2 p_size, Color p_color) {
+		ColorRect *rect = memnew(ColorRect);
+		rect->set_position(p_position);
+		rect->set_size(p_size);
+		rect->set_color(p_color);
+		rect->set_mouse_filter(Control::MOUSE_FILTER_IGNORE);
+		p_parent->add_child(rect);
+		return rect;
+	};
+	add_rect(screen_root, Vector2(), Vector2(540, 304), Color(0.055, 0.26, 0.34));
+	for (int x = 0; x < 540; x += 18) {
+		add_rect(screen_root, Vector2(x, 0), Vector2(2, 304), Color(0.35, 0.75, 0.72, 0.22));
+	}
+	for (int y = 32; y < 304; y += 48) {
+		add_rect(screen_root, Vector2(0, y), Vector2(540, 2), Color(0.42, 0.72, 0.74, 0.25));
+	}
+	add_rect(screen_root, Vector2(32, 52), Vector2(116, 5), Color(0.95, 0.46, 0.2));
+	add_rect(screen_root, Vector2(32, 64), Vector2(72, 5), Color(0.22, 0.9, 0.71));
+	add_label(screen_root, Vector2(24, 18), Vector2(460, 30), "CAM 04  /  CONTROL ROOM", 18,
+		Color(0.82, 0.94, 0.89));
+	add_label(screen_root, Vector2(28, 274), Vector2(280, 22), "SIGNAL  60 Hz      CH 04", 13,
+		Color(0.7, 0.86, 0.83));
+	screen_test_button = memnew(Button);
+	screen_test_button->set_position(Vector2(190, 206));
+	screen_test_button->set_size(Vector2(160, 48));
+	screen_test_button->set_text(String::utf8("打 开 主 机"));
+	screen_test_button->connect("pressed", Callable(this, "_on_pipeline_screen_pressed"));
+	screen_root->add_child(screen_test_button);
+
+	// 监控源只处理自身贴图，不额外复制整个主画布。
+	footage_effect = memnew(NVFootageEffect);
+	footage_effect->set_position(Vector2(610, 100));
+	footage_effect->set_size(Vector2(454, 255));
+	footage_effect->set_footage(make_footage_texture());
+	footage_effect->set_analog_profile(ResourceLoader::get_singleton()->load(
+		"res://addons/night_voyageExt/presets/monitor_feed.tres"));
+	add_child(footage_effect);
+	add_label(this, Vector2(610, 360), Vector2(454, 20), "COLOR GRADE  /  SCANLINE  /  GRAIN  /  ROLLING BAND", 12,
+		Color(0.58, 0.64, 0.64));
+
+	// 圆角形状资源同时提供 Shader 半径与 GUI 命中距离场。
+	clip_viewport = memnew(NVClipViewport);
+	clip_viewport->set_position(Vector2(610, 414));
+	clip_viewport->set_size(Vector2(260, 156));
+	Ref<NVHitShape> rounded_shape;
+	rounded_shape.instantiate();
+	rounded_shape->set_corner_radii(Vector4(34, 34, 34, 34));
+	clip_viewport->set_hit_shape(rounded_shape);
+	add_child(clip_viewport);
+	Control *rounded_root = clip_viewport->get_content_root();
+	add_rect(rounded_root, Vector2(), Vector2(260, 156), Color(0.13, 0.44, 0.47));
+	clip_test_button = memnew(Button);
+	clip_test_button->set_position(Vector2());
+	clip_test_button->set_size(Vector2(260, 156));
+	clip_test_button->set_flat(true);
+	clip_test_button->set_text(String::utf8("圆角范围内可点击"));
+	clip_test_button->connect("pressed", Callable(this, "_on_pipeline_clip_pressed"));
+	rounded_root->add_child(clip_test_button);
+
+	alpha_test_button = memnew(Button);
+	alpha_test_button->set_position(Vector2());
+	alpha_test_button->set_size(Vector2(164, 164));
+	alpha_test_button->set_flat(true);
+	alpha_test_button->set_text("ALPHA\nHIT");
+	alpha_test_button->connect("pressed", Callable(this, "_on_pipeline_alpha_pressed"));
+	Ref<NVHitShape> alpha_shape;
+	alpha_shape.instantiate();
+	alpha_shape->set_shape_type(NVHitShape::SHAPE_ALPHA_MASK);
+	alpha_shape->set_alpha_mask(make_ring_mask_texture());
+	alpha_clip_viewport = memnew(NVClipViewport);
+	alpha_clip_viewport->set_position(Vector2(900, 414));
+	alpha_clip_viewport->set_size(Vector2(164, 164));
+	alpha_clip_viewport->set_hit_shape(alpha_shape);
+	add_child(alpha_clip_viewport);
+	Control *alpha_root = alpha_clip_viewport->get_content_root();
+	add_rect(alpha_root, Vector2(), Vector2(164, 164), Color(0.2, 0.67, 0.68));
+	alpha_root->add_child(alpha_test_button);
+
+	add_label(this, Vector2(32, 620), Vector2(1032, 44),
+		"屏幕层与监控源共享信号参数；SubViewport 将一组子 UI 合成为一个可裁切、可变形的纹理。", 15,
+		Color(0.62, 0.72, 0.74));
+	add_label(this, Vector2(32, 680), Vector2(1032, 28),
+		p_validation ? "自动测试将检查实际 GPU 像素，并注入圆角、Alpha 空洞与弯曲屏幕的鼠标事件。" :
+			"可点击屏幕中央按钮、圆角面板与 Alpha 环；圆角外侧和环形空洞会拒绝点击。",
+		14, Color(0.48, 0.59, 0.62));
+}
+
+void NVEffectsDemo::on_pipeline_screen_pressed() { ++screen_button_count; }
+void NVEffectsDemo::on_pipeline_clip_pressed() { ++clip_button_count; }
+void NVEffectsDemo::on_pipeline_alpha_pressed() { ++alpha_button_count; }
+
+void NVEffectsDemo::inject_pointer_click(Vector2 p_position) {
+	// 输入由真实主 Viewport 分发，再经过组件映射至子 Viewport。
+	Ref<InputEventMouseMotion> motion;
+	motion.instantiate();
+	motion->set_position(p_position);
+	motion->set_relative(Vector2());
+	Input::get_singleton()->parse_input_event(motion);
+
+	Ref<InputEventMouseButton> button;
+	button.instantiate();
+	button->set_position(p_position);
+	button->set_button_index(MouseButton::MOUSE_BUTTON_LEFT);
+	button->set_pressed(true);
+	Input::get_singleton()->parse_input_event(button);
+	Ref<InputEventMouseButton> release;
+	release.instantiate();
+	release->set_position(p_position);
+	release->set_button_index(MouseButton::MOUSE_BUTTON_LEFT);
+	release->set_pressed(false);
+	Input::get_singleton()->parse_input_event(release);
+}
+
+void NVEffectsDemo::validate_pipeline_pixels() {
+	// 只在自动验证场景执行同步 GPU 读回；运行时效果组件不读取渲染结果。
+	Ref<Image> image = get_viewport()->get_texture()->get_image();
+	check(image.is_valid() && image->get_width() == 1120 && image->get_height() == 760,
+		"display pipeline GPU readback available");
+	if (image.is_null() || image->get_width() != 1120 || image->get_height() != 760) { return; }
+	const Color crt_pixel = image->get_pixel(82, 250);
+	const Color crt_warp_edge = image->get_pixel(34, 250);
+	const Color feed_pixel = image->get_pixel(715, 230);
+	const Color rounded_corner = image->get_pixel(612, 416);
+	const Color rounded_center = image->get_pixel(740, 490);
+	const Color alpha_hole = image->get_pixel(982, 496);
+	const Color alpha_ring = image->get_pixel(982, 452);
+	UtilityFunctions::print("Pipeline pixels CRT=", crt_pixel, " warp_edge=", crt_warp_edge, " feed=", feed_pixel,
+		" rounded_corner=", rounded_corner, " rounded_center=", rounded_center,
+		" alpha_hole=", alpha_hole, " alpha_ring=", alpha_ring);
+	check(crt_pixel.b > crt_pixel.r + 0.08 && crt_pixel.g > crt_pixel.r + 0.08,
+		"CRT viewport renders the colored source content");
+	check(crt_pixel.g > crt_warp_edge.g + 0.16,
+		"CRT warp exposes the transparent edge where its source mapping leaves the viewport");
+	check(feed_pixel.b - feed_pixel.g < 0.28,
+		"monitor grade reduces source saturation while retaining its color");
+	double scanline_min = 1.0;
+	double scanline_max = 0.0;
+	for (int y = 110; y < 350; ++y) {
+		const Color sample = image->get_pixel(715, y);
+		const double luma = sample.r * 0.2126 + sample.g * 0.7152 + sample.b * 0.0722;
+		scanline_min = std::min(scanline_min, luma);
+		scanline_max = std::max(scanline_max, luma);
+	}
+	check(scanline_max - scanline_min > 0.12,
+		"monitor scanlines produce a visible row-level luminance range");
+	check(rounded_center.g > rounded_corner.g + 0.08,
+		"rounded viewport clips its corner and preserves the interior");
+	check(alpha_ring.g > alpha_hole.g + 0.18,
+		"alpha viewport keeps the opaque ring and clips its transparent hole");
+}
+
+void NVEffectsDemo::process_pipeline_validation() {
+	if (frame == 12) {
+		validate_pipeline_pixels();
+		save_capture("display_pipeline_validation.png");
+	} else if (frame == 18) {
+		const Vector2 content_target = screen_test_button->get_position() + screen_test_button->get_size() * 0.5;
+		Vector2 display_position = content_target;
+		for (int iteration = 0; iteration < 16; ++iteration) {
+			const Vector2 sampled = screen_effect->get_warp_profile()->map_display_to_content(
+				display_position, screen_effect->get_size());
+			display_position += content_target - sampled;
+		}
+		const Vector2 mapped_target = screen_effect->get_warp_profile()->map_display_to_content(
+			display_position, screen_effect->get_size());
+		check(mapped_target.distance_to(content_target) < 0.25,
+			"CPU inverse click coordinate matches the CRT shader mapping");
+		inject_pointer_click(screen_effect->get_global_transform_with_canvas().xform(display_position));
+		inject_pointer_click(screen_effect->get_global_transform_with_canvas().xform(Vector2(1, 1)));
+		inject_pointer_click(clip_viewport->get_global_transform_with_canvas().xform(Vector2(130, 78)));
+		inject_pointer_click(clip_viewport->get_global_transform_with_canvas().xform(Vector2(2, 2)));
+		inject_pointer_click(alpha_clip_viewport->get_global_transform_with_canvas().xform(Vector2(82, 45)));
+		inject_pointer_click(alpha_clip_viewport->get_global_transform_with_canvas().xform(Vector2(82, 82)));
+	} else if (frame == 28) {
+		check(screen_button_count == 1, "warped screen click reaches the displayed button and edge is rejected");
+		check(clip_button_count == 1, "rounded hit shape accepts its center and rejects the clipped corner");
+		check(alpha_button_count == 1, "alpha hit mask accepts the ring and rejects its transparent hole");
+	} else if (frame == 38) {
+		UtilityFunctions::print("NV_PIPELINE_TEST failures=", failures);
+		get_tree()->quit(failures == 0 ? 0 : 1);
+	}
+}
+
 void NVEffectsDemo::_draw() {
 	if (Engine::get_singleton()->is_editor_hint()) { return; }
 	if (validation) {
@@ -161,6 +429,14 @@ void NVEffectsDemo::_draw() {
 			const float value = ((x / 4) % 2 == 0) ? 0.85f : 0.25f;
 			draw_rect(Rect2(x, 16, 4, 208), Color(value, value, value));
 		}
+		return;
+	}
+	if (pipeline_demo) {
+		draw_rect(Rect2(0, 0, 1120, 760), Color(0.045, 0.065, 0.085));
+		draw_rect(Rect2(24, 94, 556, 316), Color(0.08, 0.12, 0.14));
+		draw_rect(Rect2(602, 94, 470, 270), Color(0.1, 0.11, 0.12));
+		draw_rect(Rect2(602, 408, 276, 168), Color(0.09, 0.12, 0.13));
+		draw_rect(Rect2(892, 408, 180, 168), Color(0.09, 0.12, 0.13));
 		return;
 	}
 	draw_rect(Rect2(0, 0, 1280, 800), Color(0.055, 0.075, 0.10));
@@ -263,8 +539,10 @@ void NVEffectsDemo::_process(double p_delta) {
 	(void)p_delta;
 	++frame;
 	if (capture && !validation && frame == 20) {
-		save_capture("ui_effects_demo.png"); get_tree()->quit(); return;
+		save_capture(pipeline_demo ? "display_pipeline_demo.png" : "ui_effects_demo.png");
+		if (!pipeline_validation) { get_tree()->quit(); return; }
 	}
+	if (pipeline_validation) { process_pipeline_validation(); return; }
 	if (!validation) { return; }
 	auto read_glass_center = [](NVGlassPanel *p_glass) {
 		Ref<Image> image = p_glass->get_viewport()->get_texture()->get_image();
