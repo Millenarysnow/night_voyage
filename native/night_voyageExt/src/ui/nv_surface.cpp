@@ -91,9 +91,16 @@ void NVSurface::update_effect() {
 	draw_padding = surface_style->get_draw_padding();
 	effect_material->set_shader_parameter("surface_size", get_size());
 	effect_material->set_shader_parameter("draw_padding", draw_padding);
+	effect_material->set_shader_parameter("fill_gradient", surface_style->get_fill_gradient_texture());
+	effect_material->set_shader_parameter("has_fill_gradient", surface_style->has_fill_gradient());
 #define NV_UPLOAD(name) effect_material->set_shader_parameter(#name, surface_style->get_##name());
+	NV_UPLOAD(fill_mode)
 	NV_UPLOAD(corner_radii)
 	NV_UPLOAD(fill_color)
+	NV_UPLOAD(gradient_start)
+	NV_UPLOAD(gradient_end)
+	NV_UPLOAD(gradient_center)
+	NV_UPLOAD(gradient_radius)
 	NV_UPLOAD(border_color)
 	NV_UPLOAD(border_width)
 	NV_UPLOAD(shadow_color)

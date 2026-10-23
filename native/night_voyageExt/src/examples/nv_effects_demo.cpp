@@ -227,6 +227,8 @@ void NVEffectsDemo::build_pipeline_demo(bool p_validation) {
 		Color(0.6, 0.82, 0.84));
 	add_label(this, Vector2(900, 386), Vector2(180, 24), "04  Alpha 形状裁切", 16,
 		Color(0.6, 0.82, 0.84));
+	add_label(this, Vector2(32, 414), Vector2(520, 24), "05  线性渐变 + 径向渐变", 16,
+		Color(0.82, 0.72, 0.5));
 
 	// CRT 作为完整画布层组合径向位移、扫描线、暗角与信号扰动。
 	screen_effect = memnew(NVScreenEffectViewport);
@@ -320,6 +322,25 @@ void NVEffectsDemo::build_pipeline_demo(bool p_validation) {
 	add_rect(alpha_root, Vector2(), Vector2(164, 164), Color(0.2, 0.67, 0.68));
 	alpha_root->add_child(alpha_test_button);
 
+	// 两种渐变都复用 NVSurface 的单次绘制路径，颜色停止点来自可保存的 Gradient 资源。
+	linear_gradient_surface = memnew(NVSurface);
+	linear_gradient_surface->set_position(Vector2(32, 444));
+	linear_gradient_surface->set_size(Vector2(250, 132));
+	linear_gradient_surface->set_surface_style(ResourceLoader::get_singleton()->load(
+		"res://addons/night_voyageExt/presets/gradient_linear.tres"));
+	add_child(linear_gradient_surface);
+	add_label(linear_gradient_surface, Vector2(20, 86), Vector2(210, 30), "LINEAR / 3 STOPS", 15,
+		Color(0.92, 0.97, 1.0));
+
+	radial_gradient_surface = memnew(NVSurface);
+	radial_gradient_surface->set_position(Vector2(300, 444));
+	radial_gradient_surface->set_size(Vector2(250, 132));
+	radial_gradient_surface->set_surface_style(ResourceLoader::get_singleton()->load(
+		"res://addons/night_voyageExt/presets/gradient_radial.tres"));
+	add_child(radial_gradient_surface);
+	add_label(radial_gradient_surface, Vector2(20, 86), Vector2(210, 30), "RADIAL / ELLIPTICAL", 15,
+		Color(1.0, 0.92, 0.76));
+
 	add_label(this, Vector2(32, 620), Vector2(1032, 44),
 		"屏幕层与监控源共享信号参数；SubViewport 将一组子 UI 合成为一个可裁切、可变形的纹理。", 15,
 		Color(0.62, 0.72, 0.74));
@@ -395,9 +416,15 @@ void NVEffectsDemo::validate_pipeline_pixels() {
 	const Color rounded_center = image->get_pixel(740, 490);
 	const Color alpha_hole = image->get_pixel(982, 496);
 	const Color alpha_ring = image->get_pixel(982, 452);
+	const Color linear_left = image->get_pixel(48, 530);
+	const Color linear_right = image->get_pixel(260, 530);
+	const Color radial_center = image->get_pixel(388, 486);
+	const Color radial_edge = image->get_pixel(310, 504);
 	UtilityFunctions::print("Pipeline pixels CRT=", crt_pixel, " warp_edge=", crt_warp_edge, " feed=", feed_pixel,
 		" rounded_corner=", rounded_corner, " rounded_center=", rounded_center,
-		" alpha_hole=", alpha_hole, " alpha_ring=", alpha_ring);
+		" alpha_hole=", alpha_hole, " alpha_ring=", alpha_ring,
+		" linear_left=", linear_left, " linear_right=", linear_right,
+		" radial_center=", radial_center, " radial_edge=", radial_edge);
 	check(crt_pixel.b > crt_pixel.r + 0.08 && crt_pixel.g > crt_pixel.r + 0.08,
 		"CRT viewport renders the colored source content");
 	check(crt_pixel.g > crt_warp_edge.g + 0.16,
@@ -418,6 +445,10 @@ void NVEffectsDemo::validate_pipeline_pixels() {
 		"rounded viewport clips its corner and preserves the interior");
 	check(alpha_ring.g > alpha_hole.g + 0.18,
 		"alpha viewport keeps the opaque ring and clips its transparent hole");
+	check(linear_left.b > linear_left.r + 0.12 && linear_right.r > linear_right.b + 0.12,
+		"linear gradient traverses its color stops across the surface");
+	check(radial_center.r > radial_edge.r && radial_center.g > radial_edge.g + 0.3,
+		"radial gradient uses an elliptical distance from its configured center");
 }
 
 void NVEffectsDemo::process_pipeline_validation() {
@@ -450,6 +481,16 @@ void NVEffectsDemo::process_pipeline_validation() {
 		check(!screen_test_button->is_pressed(), "dragging beyond warped edge still releases the child button");
 		check(clip_button_count == 1, "rounded hit shape accepts its center and rejects the clipped corner");
 		check(alpha_button_count == 1, "alpha hit mask accepts the ring and rejects its transparent hole");
+		// 修改 Gradient 的停止点，验证资源信号会更新已有材质而不是只在初始化时生效。
+		Ref<Gradient> gradient = linear_gradient_surface->get_surface_style()->get_fill_gradient();
+		if (gradient.is_valid()) {
+			gradient->set_color(0, Color(0.95, 0.08, 0.12, 1.0));
+		}
+	} else if (frame == 34) {
+		Ref<Image> image = get_viewport()->get_texture()->get_image();
+		const Color updated_linear_left = image->get_pixel(48, 530);
+		check(updated_linear_left.r > updated_linear_left.g + 0.25,
+			"editing a Gradient stop refreshes the shared surface material");
 	} else if (frame == 38) {
 		UtilityFunctions::print("NV_PIPELINE_TEST failures=", failures);
 		get_tree()->quit(failures == 0 ? 0 : 1);
@@ -469,6 +510,7 @@ void NVEffectsDemo::_draw() {
 	if (pipeline_demo) {
 		draw_rect(Rect2(0, 0, 1120, 760), Color(0.045, 0.065, 0.085));
 		draw_rect(Rect2(24, 94, 556, 316), Color(0.08, 0.12, 0.14));
+		draw_rect(Rect2(24, 408, 556, 178), Color(0.07, 0.10, 0.12));
 		draw_rect(Rect2(602, 94, 470, 270), Color(0.1, 0.11, 0.12));
 		draw_rect(Rect2(602, 408, 276, 168), Color(0.09, 0.12, 0.13));
 		draw_rect(Rect2(892, 408, 180, 168), Color(0.09, 0.12, 0.13));

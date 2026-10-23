@@ -10,7 +10,7 @@ void fragment() {
 	float d = nv_round_rect(p, surface_size, corner_radii);
 	float shape = nv_coverage(d);
 	vec4 result = nv_outer_layers(p, d, shape);
-	result = nv_over(result, fill_color, shape);
+	result = nv_over(result, nv_fill_at(p), shape);
 	result = nv_inner_layers(result, p, d, shape);
 	COLOR = nv_straight(result) * modulation;
 }

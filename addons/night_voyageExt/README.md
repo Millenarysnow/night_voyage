@@ -1,6 +1,6 @@
 # Night Voyage 原生 UI 效果组件
 
-同一个 GDExtension addon 提供毛玻璃、圆角表面、外/内阴影、光晕、透明轮廓投影、CRT 位移与显示器信号效果、监控画面调色，以及圆角/Alpha 裁切和对应的精确命中。运行时代码使用 **C++17 + CanvasItem Shader**，没有新增 GDScript 或 C#，保留原有 `ExampleClass`。
+同一个 GDExtension addon 提供毛玻璃、圆角表面、纯色/线性/径向渐变、外/内阴影、光晕、透明轮廓投影、CRT 位移与显示器信号效果、监控画面调色，以及圆角/Alpha 裁切和对应的精确命中。运行时代码使用 **C++17 + CanvasItem Shader**，没有新增 GDScript 或 C#，保留原有 `ExampleClass`。
 
 当前绑定 Godot **4.8** API。本机验证版本：`4.8.beta.custom_build.679066724`，Windows x86_64 / GL Compatibility / RTX 4060 Ti。其他小版本需要匹配 godot-cpp API 后重新编译，不能直接声称兼容 4.6。
 
@@ -14,7 +14,7 @@
 
 | 最小组件 | 用途 | 组合方式 |
 | --- | --- | --- |
-| `NVSurface : Control` | 圆角填充、边框、外阴影、内阴影、光晕 | 用样式关闭不需要的层，普通 UI 可直接作为子项 |
+| `NVSurface : Control` | 纯色/线性/径向渐变填充、圆角、边框、外阴影、内阴影、光晕 | 用样式关闭不需要的层，普通 UI 可直接作为子项 |
 | `NVGlassPanel : NVSurface` | 背景模糊、染色、饱和度、亮度 | 包含同样的表面效果，子项的文字/图标保持清晰 |
 | `NVAlphaShadow : Control` | 依据 `Texture2D` 的 Alpha 生成投影 | 可同时显示原图，也可只显示投影；彩色阴影可作为轮廓光晕 |
 | `NVSurfaceStyle : Resource` | 多节点共享的样式 | 保存为 `.tres`，与节点及业务逻辑分离 |
@@ -29,12 +29,14 @@
 ## 接入自己的 UI
 
 1. 在创建节点窗口搜索 `NVGlassPanel` / `NVSurface` / `NVAlphaShadow` / `NVScreenEffectViewport` / `NVFootageEffect` / `NVClipViewport`，或实例化 `components/*.tscn`。
-2. 表面的 `Surface Style` 指向一个 `NVSurfaceStyle`。可以复用 `presets/` 下三份 `.tres`，也可新建样式。未指定样式时，进入场景后会创建独立默认资源。
+2. 表面的 `Surface Style` 指向一个 `NVSurfaceStyle`。可以复用 `presets/` 下的 `.tres`，也可新建样式。未指定样式时，进入场景后会创建独立默认资源。
 3. 在表面下面放 `MarginContainer`、`VBoxContainer`、`Label`、`Button` 等普通节点，配置锚点与边距。表面本身不是 `Container`，不会自动安排子节点，也不从内容推导最小尺寸；在外层 Container 中使用时设置 `custom_minimum_size` 和尺寸标志。
 4. 共享样式会同步更新所有使用者。只改一个实例时，先在 Inspector 中把资源设为独立副本。
 5. Alpha 投影的 `Texture` 需要带透明通道，并设置 Control 尺寸。图片会拉伸到整个 Control；保留比例可在外面放 `AspectRatioContainer`。`Show Source=false` 时只显示投影，便于自己叠放原图。
 6. 完整画面需要 CRT 效果时，把主界面控件放到 `NVScreenEffectViewport/Content`，用 `Warp Profile` 与 `Analog Profile` 控制变形和显示质感。监控视频单独放入自己的 SubViewport，再把其 `ViewportTexture` 交给 `NVFootageEffect`。
 7. 对子 UI 做裁切时，把按钮、文字等放到 `NVClipViewport/Content`，将 `Hit Shape` 资源设为圆角矩形或 Alpha 遮罩。Alpha 遮罩建议使用静态带 Alpha 的 `Texture2D`；内容纹理与形状资源分别决定画面和点击区域。
+
+8. 需要渐变填充时，在 `NVSurfaceStyle` 中将 `Fill Mode` 设为 `Linear Gradient` 或 `Radial Gradient`，把 `Fill Gradient` 指向一个 Godot `Gradient` 资源。`Gradient` 可包含任意数量的颜色停止点，并可设置线性插值、常量插值或三次插值。渐变坐标均为表面内容区域的归一化坐标：线性模式使用 `gradient_start` 到 `gradient_end`，径向模式使用 `gradient_center` 和椭圆半径 `gradient_radius`。启用渐变后，停止点颜色（包括 Alpha）决定填充颜色和不透明度，`fill_color` 只在 `Solid` 模式下使用。
 
 默认鼠标策略：表面为 `PASS`，Alpha 投影为 `IGNORE`，子节点继续使用原生输入、焦点与导航。阴影扩展的是绘制范围，**不会扩大布局或鼠标命中范围**。父容器若开启 `clip_contents`，外扩阴影/光晕也会被裁掉。圆角只作用于自身表面，**不会把整棵子 UI 按圆角裁剪**。
 
@@ -44,10 +46,16 @@
 
 `NVAnalogProfile` 可同时供屏幕和监控画面使用：亮度/对比度/饱和度、扫描线、颗粒、暗角、镜面反光、滚动亮带和轻微闪烁都合成在一次 CanvasItem 绘制中。动态层直接使用 Shader `TIME`；关闭 `motion_enabled` 后噪点固定且闪烁/亮带停止。`NVFootageEffect` 的采样 UV 覆盖整块控件，素材会拉伸填满；需要保持长宽比时，在外部用 `AspectRatioContainer`。
 
+`NVSurfaceStyle` 的渐变填充通过一张共享的 256×1 `GradientTexture1D` 采样，渐变坐标和颜色停止点在 CPU 侧只在资源变化时上传，绘制时与 SDF 圆角、边框、阴影和光晕合成在同一个片元 Shader 中。多个节点共享同一个样式资源时只保留一份渐变纹理；只改渐变方向、中心或半径不会重建纹理。
+
 ## 参数与单位
 
 `NVSurfaceStyle`：
 
+- `fill_mode`：`Solid`、`Linear Gradient` 或 `Radial Gradient`。渐变模式需要设置 `fill_gradient`。
+- `fill_gradient`：Godot `Gradient` 资源，可包含多个颜色停止点；停止点 Alpha 控制填充不透明度。
+- `gradient_start / gradient_end`：线性渐变的归一化起点和终点，允许超出 0–1 以制作延伸渐变。
+- `gradient_center / gradient_radius`：径向渐变的归一化中心和 X/Y 半径；半径决定椭圆范围。
 - `corner_radii`：左上、右上、右下、左下的半径，每个限制到短边的一半。
 - `fill_color`：普通表面的 RGBA 填充。**在玻璃中，Alpha 表示染色强度**；整个玻璃淡出请改节点 `modulate.a`。
 - `border_color / border_width`：向内描边，不改变布局。
@@ -83,6 +91,7 @@
 ## 性能设计
 
 - 圆角、填充、边框、内外阴影、光晕由一个扩展四边形的 SDF Shader 合成，无贴图卷积，无额外离屏 Viewport；关闭效果跳过对应分支。
+- 渐变填充只增加一次 256×1 颜色纹理采样，不创建离屏 Viewport；纯色模式不采样渐变纹理。颜色停止点由 Godot `Gradient` 资源管理，适合策划在 Inspector 中复用和调整。
 - 玻璃复用 Godot GPU 屏幕 mip，默认一次采样。实际成本取决于捕获面积、面板数量、重叠和屏幕分辨率，**使用 Shader 本身不代表一定更快**。
 - Alpha 投影用两个低分辨率 `SubViewport` 分别横向/纵向模糊，每步每像素 25 次 Alpha 读取。仅尺寸、纹理、半径、缓存设置变化时重建；同帧多次修改合并。完成后两个 Viewport 停止更新并断开帧回调，最终显示层读取一次缓存，可选再读取一次原图。
 - CRT 与裁切组件各将子 UI 合成到一个透明 `SubViewport`，再用单次 Shader 绘制做显示变形或遮罩；不可见时由 `UPDATE_WHEN_PARENT_VISIBLE` 暂停离屏重绘。它们适合需要整组裁切/处理的内容，不应为了静态单图增加 Viewport。

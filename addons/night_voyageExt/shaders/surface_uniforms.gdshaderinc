@@ -1,8 +1,15 @@
 // 几何尺寸由 C++ 在尺寸/样式变化时上传，不需要每帧轮询。
 uniform vec2 surface_size = vec2(240.0, 140.0);
 uniform float draw_padding = 0.0;
+uniform int fill_mode = 0;
 uniform vec4 corner_radii = vec4(16.0);
 uniform vec4 fill_color : source_color = vec4(0.08, 0.10, 0.15, 1.0);
+uniform sampler2D fill_gradient : source_color, repeat_disable, filter_linear;
+uniform bool has_fill_gradient = false;
+uniform vec2 gradient_start = vec2(0.0, 0.0);
+uniform vec2 gradient_end = vec2(1.0, 1.0);
+uniform vec2 gradient_center = vec2(0.5, 0.5);
+uniform vec2 gradient_radius = vec2(0.5, 0.5);
 uniform vec4 border_color : source_color = vec4(0.5, 0.6, 0.8, 0.3);
 uniform float border_width = 1.0;
 uniform vec4 shadow_color : source_color = vec4(0.0, 0.0, 0.0, 0.5);
@@ -15,6 +22,21 @@ uniform float glow_spread = 0.0;
 uniform vec4 inner_shadow_color : source_color = vec4(0.0);
 uniform vec2 inner_shadow_offset = vec2(0.0, 3.0);
 uniform float inner_shadow_softness = 5.0;
+
+vec4 nv_fill_at(vec2 p) {
+	if (!has_fill_gradient || fill_mode == 0) {
+		return fill_color;
+	}
+	vec2 uv = clamp(p / max(surface_size, vec2(1.0)), vec2(0.0), vec2(1.0));
+	float amount = 0.0;
+	if (fill_mode == 1) {
+		vec2 direction = gradient_end - gradient_start;
+		amount = dot(uv - gradient_start, direction) / max(dot(direction, direction), 0.000001);
+	} else {
+		amount = length((uv - gradient_center) / max(gradient_radius, vec2(0.001)));
+	}
+	return texture(fill_gradient, vec2(clamp(amount, 0.0, 1.0), 0.5));
+}
 
 vec4 nv_outer_layers(vec2 p, float d, float shape) {
 	vec4 result = vec4(0.0);

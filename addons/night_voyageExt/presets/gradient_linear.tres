@@ -1,0 +1,19 @@
+[gd_resource type="NVSurfaceStyle" load_steps=2 format=3]
+
+[sub_resource type="Gradient" id="Gradient_linear"]
+offsets = PackedFloat32Array(0, 0.48, 1)
+colors = PackedColorArray(0.1, 0.85, 0.95, 1, 0.25, 0.45, 0.95, 1, 0.88, 0.22, 0.56, 1)
+
+[resource]
+fill_mode = 1
+fill_gradient = SubResource("Gradient_linear")
+gradient_start = Vector2(0, 0.5)
+gradient_end = Vector2(1, 0.5)
+corner_radii = Vector4(18, 18, 18, 18)
+fill_color = Color(1, 1, 1, 1)
+border_color = Color(0.7, 0.95, 1, 0.65)
+border_width = 1.0
+shadow_color = Color(0, 0, 0, 0.42)
+shadow_offset = Vector2(0, 8)
+shadow_softness = 10.0
+

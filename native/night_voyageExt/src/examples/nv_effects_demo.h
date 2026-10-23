@@ -25,6 +25,8 @@ class NVEffectsDemo : public Control {
 	NVScreenEffectViewport *screen_effect = nullptr;
 	NVClipViewport *clip_viewport = nullptr;
 	NVClipViewport *alpha_clip_viewport = nullptr;
+	NVSurface *linear_gradient_surface = nullptr;
+	NVSurface *radial_gradient_surface = nullptr;
 	NVFootageEffect *footage_effect = nullptr;
 	Button *screen_test_button = nullptr;
 	Button *clip_test_button = nullptr;

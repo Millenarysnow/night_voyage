@@ -32,8 +32,9 @@ void fragment() {
 		}
 		float gray = dot(color, vec3(0.2126, 0.7152, 0.0722));
 		color = mix(vec3(gray), color, saturation) * brightness;
-		// fill_color 的 Alpha 表示玻璃染色的强度，绝不模糊其子控件上的文字。
-		color = mix(color, fill_color.rgb, fill_color.a);
+		// 纯色时 fill_color 的 Alpha 表示染色强度；启用渐变时由渐变各停止点的 Alpha 控制。
+		vec4 tint = nv_fill_at(p);
+		color = mix(color, tint.rgb, tint.a);
 		result = nv_over(result, vec4(color, 1.0), shape);
 	}
 	result = nv_inner_layers(result, p, d, shape);
