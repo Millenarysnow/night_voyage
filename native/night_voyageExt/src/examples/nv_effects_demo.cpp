@@ -22,6 +22,9 @@
 namespace godot {
 
 void NVEffectsDemo::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_pipeline_mode", "enabled"), &NVEffectsDemo::set_pipeline_mode);
+	ClassDB::bind_method(D_METHOD("get_pipeline_mode"), &NVEffectsDemo::get_pipeline_mode);
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "pipeline_mode"), "set_pipeline_mode", "get_pipeline_mode");
 	ClassDB::bind_method(D_METHOD("_blur_changed", "value"), &NVEffectsDemo::on_blur_changed);
 	ClassDB::bind_method(D_METHOD("_quality_toggled", "enabled"), &NVEffectsDemo::on_quality_toggled);
 	ClassDB::bind_method(D_METHOD("_shadow_changed", "value"), &NVEffectsDemo::on_shadow_changed);
@@ -110,7 +113,8 @@ void NVEffectsDemo::_ready() {
 	validation = args.has("--nv-self-test");
 	capture = args.has("--nv-capture");
 	pipeline_validation = args.has("--nv-pipeline-test");
-	pipeline_demo = pipeline_validation || args.has("--nv-pipeline-demo");
+	// 正常演示由场景属性决定；命令行开关只作为旧测试/临时调试的兼容入口。
+	pipeline_demo = pipeline_mode || pipeline_validation || args.has("--nv-pipeline-demo");
 	if (validation) {
 #ifdef DEBUG_ENABLED
 		UtilityFunctions::print("NV extension build: template_debug");

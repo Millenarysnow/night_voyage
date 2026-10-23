@@ -6,9 +6,9 @@
 
 ## 先看效果
 
-打开 `examples/effects_demo.tscn`，运行当前场景（F6）。场景不替换原来的 `main.tscn`。上方展示玻璃内外的栅格对照、叠放玻璃和清晰的前景文字，下方展示阴影、光晕与中间镂空的 Alpha 投影；底部滑块可以调节模糊。
+打开 `examples/display_pipeline_demo.tscn`，运行当前场景（F6），或直接运行项目（F5）。它是一个独立的显示效果演示地图，场景资源中的 `pipeline_mode=true` 会自动创建 CRT 屏幕、监控画面、圆角裁切和 Alpha 裁切，不需要命令行参数。原来的 `examples/effects_demo.tscn` 仍保留毛玻璃、阴影、光晕与 Alpha 投影基础演示。
 
-同一个场景还提供显示效果专用演示，可从命令行加 `-- --nv-pipeline-demo` 运行，查看 CRT 屏幕变形、监控图像处理和形状裁切。添加 `-- --nv-pipeline-test` 会在 GL Compatibility 实际渲染后端检查 GPU 像素，并向变形屏幕、圆角区域和 Alpha 环注入鼠标点击，验证命中范围与显示形状一致。
+`--nv-pipeline-test` 只用于自动验收：它会在 GL Compatibility 实际渲染后端检查 GPU 像素，并向变形屏幕、圆角区域和 Alpha 环注入鼠标点击，验证命中范围与显示形状一致。正常查看效果不需要这个参数。
 
 演示由原生 `NVEffectsDemo` 在运行时搭建，所以编辑器里的演示根场景是空的；**实际组件自身支持编辑器预览**。在编辑器中摆放时，使用下列原生节点，或 `components/` 下的四个可实例化场景。
 
@@ -120,8 +120,8 @@ cmake --build cmake-build-release --target night_voyageExt --parallel 8
 
 ```powershell
 godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-self-test
-godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-capture
-godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/effects_demo.tscn -- --nv-pipeline-test
+godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/display_pipeline_demo.tscn -- --nv-capture
+godot --path . --rendering-method gl_compatibility res://addons/night_voyageExt/examples/display_pipeline_demo.tscn -- --nv-pipeline-test
 ```
 
 `--nv-self-test` 验证毛玻璃、表面、Alpha 投影与缓存生命周期；`--nv-pipeline-test` 验证 CRT/监控/裁切像素和变形、圆角、Alpha 命中。成功退出码为 0，截图在 Git 忽略的 `artifacts/`。未承诺跨设备帧率，未验证移动/Web 导出。

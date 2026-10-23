@@ -12,7 +12,7 @@
 namespace godot {
 
 /**
- * 独立演示场景的原生控制器，不依赖游戏业务，也不更改项目的主场景。
+ * 独立演示场景的原生控制器，不依赖游戏业务；显示模式由场景资源属性声明。
  * 普通演示仅由信号更新；--nv-self-test 才启用逐帧验证与 GPU 截图读回。
  * 注意：截图读回只在验证代码中使用，三个运行时组件均不读取 GPU 像素。
  */
@@ -31,6 +31,8 @@ class NVEffectsDemo : public Control {
 	Button *alpha_test_button = nullptr;
 	Label *blur_value = nullptr;
 	Ref<ImageTexture> contour_texture;
+	// 演示模式由场景资源声明，避免正常查看效果时依赖命令行参数。
+	bool pipeline_mode = false;
 	bool validation = false;
 	bool capture = false;
 	bool pipeline_demo = false;
@@ -69,6 +71,8 @@ protected:
 	static void _bind_methods();
 
 public:
+	void set_pipeline_mode(bool p_enabled) { pipeline_mode = p_enabled; }
+	bool get_pipeline_mode() const { return pipeline_mode; }
 	void _ready() override;
 	void _draw() override;
 	void _process(double p_delta) override;

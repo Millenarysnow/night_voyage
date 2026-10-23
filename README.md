@@ -30,4 +30,4 @@ night_voyage/
 
 The compiled library is copied to `addons/night_voyageExt/bin/` by CMake after each build.
 
-See [addons/night_voyageExt/README.md](addons/night_voyageExt/README.md) for the reusable UI effects, Godot scene setup, performance notes, and GPU-backed validation commands.
+Run the project or open `addons/night_voyageExt/examples/display_pipeline_demo.tscn` and press F6 to view the new display pipeline map without command-line arguments. See [addons/night_voyageExt/README.md](addons/night_voyageExt/README.md) for the reusable UI effects, Godot scene setup, performance notes, and GPU-backed validation commands.
