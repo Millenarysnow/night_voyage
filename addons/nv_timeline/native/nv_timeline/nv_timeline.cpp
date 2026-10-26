@@ -114,6 +114,86 @@ String string_or_default(const Dictionary &p_object, const String &p_key, const 
     return String(p_object[p_key]);
 }
 
+// Godot 4.8 的 JSON 解析结果在部分构建中会把没有小数点的数字也表示为
+// FLOAT。编排协议仍然要求 id、time、duration 使用整数，因此只对协议明确
+// 的整数键做“整值且在 int32 范围内”的安全归一化；rate 等真正的 number 字段
+// 保持 FLOAT，避免把 JSON 语义偷偷改变。
+void normalize_integer_field(Dictionary &p_object, const String &p_key) {
+    if (!p_object.has(p_key) || p_object[p_key].get_type() != Variant::FLOAT) {
+        return;
+    }
+    const double value = double(p_object[p_key]);
+    if (std::isfinite(value) && std::floor(value) == value &&
+            value >= 0.0 && value <= static_cast<double>(std::numeric_limits<int32_t>::max())) {
+        p_object[p_key] = static_cast<int64_t>(value);
+    }
+}
+
+void normalize_document_integer_fields(Dictionary &p_document) {
+    normalize_integer_field(p_document, "id_counter");
+    Array clocks = p_document.get("clocks", Array());
+    for (int64_t i = 0; i < clocks.size(); ++i) {
+        if (clocks[i].get_type() == Variant::DICTIONARY) {
+            Dictionary clock = clocks[i];
+            normalize_integer_field(clock, "id");
+            clocks[i] = clock;
+        }
+    }
+    Array timelines = p_document.get("timelines", Array());
+    for (int64_t i = 0; i < timelines.size(); ++i) {
+        if (timelines[i].get_type() != Variant::DICTIONARY) {
+            continue;
+        }
+        Dictionary timeline = timelines[i];
+        normalize_integer_field(timeline, "id");
+        normalize_integer_field(timeline, "clock_id");
+        normalize_integer_field(timeline, "duration");
+        Array tracks = timeline.get("tracks", Array());
+        for (int64_t t = 0; t < tracks.size(); ++t) {
+            if (tracks[t].get_type() != Variant::DICTIONARY) {
+                continue;
+            }
+            Dictionary track = tracks[t];
+            normalize_integer_field(track, "id");
+            Array clips = track.get("clips", Array());
+            for (int64_t c = 0; c < clips.size(); ++c) {
+                if (clips[c].get_type() != Variant::DICTIONARY) {
+                    continue;
+                }
+                Dictionary clip = clips[c];
+                normalize_integer_field(clip, "id");
+                normalize_integer_field(clip, "start");
+                normalize_integer_field(clip, "duration");
+                clips[c] = clip;
+            }
+            Array marks = track.get("marks", Array());
+            for (int64_t m = 0; m < marks.size(); ++m) {
+                if (marks[m].get_type() != Variant::DICTIONARY) {
+                    continue;
+                }
+                Dictionary mark = marks[m];
+                normalize_integer_field(mark, "id");
+                normalize_integer_field(mark, "time");
+                marks[m] = mark;
+            }
+            tracks[t] = track;
+        }
+        Array listeners = timeline.get("listeners", Array());
+        for (int64_t l = 0; l < listeners.size(); ++l) {
+            if (listeners[l].get_type() == Variant::DICTIONARY) {
+                Dictionary listener = listeners[l];
+                normalize_integer_field(listener, "id");
+                listeners[l] = listener;
+            }
+        }
+        timeline["tracks"] = tracks;
+        timeline["listeners"] = listeners;
+        timelines[i] = timeline;
+    }
+    p_document["clocks"] = clocks;
+    p_document["timelines"] = timelines;
+}
+
 } // namespace
 
 // ------------------------------ NVTimelineDocument ------------------------------
@@ -188,10 +268,12 @@ bool NVTimelineDocument::save_file(const String &p_path, bool p_pretty) const {
 }
 
 bool NVTimelineDocument::set_data(const Dictionary &p_data) {
-    if (!validate_internal(p_data)) {
+    Dictionary normalized = p_data.duplicate(true);
+    normalize_document_integer_fields(normalized);
+    if (!validate_internal(normalized)) {
         return false;
     }
-    data = p_data.duplicate(true);
+    data = normalized;
     validation_errors.clear();
     return true;
 }
@@ -863,6 +945,10 @@ NVTimelineService::NVTimelineService() {
 }
 
 void NVTimelineService::_bind_methods() {
+    // 运行实例通过 Callable 回调到 Service；即使该方法主要供 C++ 内部使用，
+    // 也必须登记到 ClassDB，Godot 才能从 Callable 正确解析方法名。
+    ClassDB::bind_method(D_METHOD("_on_runtime_output", "label", "timeline_id", "run_id", "time_units"),
+            &NVTimelineService::on_runtime_output);
     ClassDB::bind_method(D_METHOD("load_document", "data"), &NVTimelineService::load_document);
     ClassDB::bind_method(D_METHOD("load_json_file", "path"), &NVTimelineService::load_json_file);
     ClassDB::bind_method(D_METHOD("save_json_file", "path", "pretty"), &NVTimelineService::save_json_file,
