@@ -14,6 +14,7 @@ JSON 保存可视化时间轴的编排结果，包括纯视觉的事件段，以
 
 - 不设置 schema_version。
 - 不设置 timebase，时间精度固定为 0.1 秒。
+- 所有配置对象的 id 使用程序生成的 int，共用文档级自增计数器 id_counter；自增结果为负数时，报错并拒绝分配。
 - 时钟只有 manual 和 realtime 两种模式，不设置 external。
 - 多个时间轴对等，可以同时存在。是否共享时间来源由时钟绑定决定。
 - 视觉事件段是类似剪辑软件素材的段落，可配置开始位置、长度、名称和颜色，只用于可视化组织。
@@ -45,7 +46,7 @@ clips 不包含输入或输出标签。片段可以与标签标记出现在同�
 
 程序可以提供只读的标签说明、处理类型说明和绑定状态，帮助编辑器选择和检查标签。当前编排实际使用的标签仍然由 JSON 保存，不依赖程序目录来补全。
 
-标识 id 必须能够在编辑器属性中查看，不保存不可见的程序绑定信息。滚动位置、窗口位置、临时选中项等编辑器会话状态不属于时间轴编排。
+标识 id 可以在编辑器属性中只读查看，由程序生成，策划不能修改。id_counter 是程序管理的文档分配元数据，不属于业务事件配置。滚动位置、窗口位置、临时选中项等编辑器会话状态不属于时间轴编排。
 
 ## 3. 文件组织与时间表示
 
@@ -74,9 +75,12 @@ clips 不包含输入或输出标签。片段可以与标签标记出现在同�
 
 ## 4. 根对象
 
+### 4.1 字段定义
+
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
 | name | string | 否 | 文件名 | 文档显示名称 |
+| id_counter | int | 是 | 新文档为 0 | 最后一次成功分配的配置对象 ID |
 | clocks | array | 是 | 无 | 时钟定义列表 |
 | timelines | array | 是 | 无 | 对等时间轴定义列表 |
 
@@ -84,12 +88,34 @@ clocks 和 timelines 可以为空，便于创建尚未编排的文档。存在�
 
 根对象不包含事件管理器、处理类、标签绑定表或运行时状态。
 
+### 4.2 文档级 ID 分配
+
+id 和 id_counter 使用有符号 32 位 int，与 C# int 一致；JSON 中写为普通整数。0 保留为未分配值，实际对象 ID 从 1 开始。
+
+clock、timeline、track、clip、mark、listener 共用同一份文档的计数器。分配流程为：
+
+~~~text
+计算 id_counter 自增一次后的 int 值
+如果结果为负数：报错，拒绝本次分配
+否则：将结果写回 id_counter，并作为新对象的 id
+~~~
+
+溢出只按“自增结果为负数”检查，不另做最大值预判。失败时不写入负数 ID 或计数器。实现时必须取得确定的 int 回绕结果；C# 可以使用 unchecked，C++ 不直接依赖有符号溢出行为。
+
+删除对象不减少计数器，已分配的 ID 不重新使用，不要求 ID 连续。撤销创建不退回计数器，重做可以恢复原对象及其原 ID。
+
+复制、粘贴或合并其他文档的对象时，为新对象重新分配 ID，并同步改写 clock_id 等内部引用。clock_id 是引用已有时钟的 ID，本身不申请新 ID。
+
+加载文档时恢复已保存的 id_counter，保存时保留其当前值，不根据现存对象重新压缩或编号。该计数器只保证单份文档内唯一，不承担跨文件唯一性。
+
+name 和 label 继续使用字符串。程序中的时间轴运行标识、事件执行标识与绑定标识不消耗此计数器，也不写入 JSON。
+
 ## 5. 时钟定义
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 文档内唯一的时钟标识 |
-| name | string | 否 | id | 时钟显示名称 |
+| id | int | 是 | 程序分配 | 文档内唯一的时钟标识 |
+| name | string | 否 | id 的文本形式 | 时钟显示名称 |
 | mode | string | 是 | 无 | manual 或 realtime |
 | rate | number | 否 | 1.0 | 实时推进倍率，只适用于 realtime |
 
@@ -101,7 +127,7 @@ rate 必须大于 0。manual 时不填写 rate，编辑器也不显示该配置�
 
 ~~~json
 {
-  "id": "desktop_clock",
+  "id": 2,
   "name": "桌面时钟",
   "mode": "realtime",
   "rate": 1.0
@@ -112,9 +138,9 @@ rate 必须大于 0。manual 时不填写 rate，编辑器也不显示该配置�
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 文档内唯一的时间轴定义标识 |
-| name | string | 否 | id | 时间轴显示名称 |
-| clock_id | string | 是 | 无 | 引用本文件的某个时钟 |
+| id | int | 是 | 程序分配 | 文档内唯一的时间轴定义标识 |
+| name | string | 否 | id 的文本形式 | 时间轴显示名称 |
+| clock_id | int | 是 | 无 | 引用本文件的某个时钟 |
 | duration | integer 或 null | 否 | null | 显示的时间轴时长；null 表示不限时长 |
 | tracks | array | 是 | 无 | 轨道列表 |
 | listeners | array | 是 | 无 | 无具体时间点的全程输入标签列表 |
@@ -131,8 +157,8 @@ JSON 中的 id 标识配置定义。运行时可以从同一份定义创建多�
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 所属时间轴内唯一的轨道标识 |
-| name | string | 否 | id | 轨道显示名称 |
+| id | int | 是 | 程序分配 | 文档内唯一的轨道标识 |
+| name | string | 否 | id 的文本形式 | 轨道显示名称 |
 | enabled | boolean | 否 | true | 是否参与运行时编排 |
 | clips | array | 否 | 空数组 | 纯视觉事件段列表 |
 | marks | array | 是 | 无 | 有具体时间点的标记列表 |
@@ -153,7 +179,7 @@ marks 建议按 time 升序保存。同一时间点的标记保留编辑器确�
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 所属时间轴内唯一的视觉事件段标识 |
+| id | int | 是 | 程序分配 | 文档内唯一的视觉事件段标识 |
 | name | string | 是 | 无 | 编辑器中显示的段落名称 |
 | start | integer | 是 | 无 | 开始位置，单位为 0.1 秒 |
 | duration | integer | 是 | 无 | 段落长度，单位为 0.1 秒，必须大于 0 |
@@ -165,7 +191,7 @@ start 必须是非负整数，duration 必须是正整数。显示范围为 [sta
 
 ~~~json
 {
-  "id": "puzzle_section",
+  "id": 5,
   "name": "解谜阶段",
   "start": 100,
   "duration": 200,
@@ -193,7 +219,7 @@ start 必须是非负整数，duration 必须是正整数。显示范围为 [sta
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 所属时间轴内唯一的标记标识 |
+| id | int | 是 | 程序分配 | 文档内唯一的标记标识 |
 | name | string | 否 | label | 编辑器显示名称 |
 | time | integer | 是 | 无 | 标记的时间位置，单位为 0.1 秒 |
 | kind | string | 是 | 无 | output 或 blocking |
@@ -207,7 +233,7 @@ kind 已经表达方向，不额外保存 direction 字段。
 
 ~~~json
 {
-  "id": "emit_intro_finished",
+  "id": 6,
   "name": "引导完成",
   "time": 100,
   "kind": "output",
@@ -225,7 +251,7 @@ kind 已经表达方向，不额外保存 direction 字段。
 
 ~~~json
 {
-  "id": "wait_puzzle",
+  "id": 7,
   "name": "等待解谜完成",
   "time": 150,
   "kind": "blocking",
@@ -245,14 +271,14 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
 
 | 字段 | 类型 | 必填 | 默认值 | 含义 |
 |---|---|---|---|---|
-| id | string | 是 | 无 | 所属时间轴内唯一的输入标识 |
+| id | int | 是 | 程序分配 | 文档内唯一的输入标识 |
 | name | string | 否 | label | 编辑器显示名称 |
 | label | string | 是 | 无 | 持续接收的输入标签 |
 | enabled | boolean | 否 | true | 是否启用该输入 |
 
 ~~~json
 {
-  "id": "listen_interrupt",
+  "id": 13,
   "name": "紧急中断",
   "label": "urgent_interrupt",
   "enabled": true
@@ -272,14 +298,15 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
 ~~~json
 {
   "name": "第一章编排",
+  "id_counter": 18,
   "clocks": [
     {
-      "id": "game_clock",
+      "id": 1,
       "name": "游戏时钟",
       "mode": "manual"
     },
     {
-      "id": "desktop_clock",
+      "id": 2,
       "name": "桌面时钟",
       "mode": "realtime",
       "rate": 1.0
@@ -287,18 +314,18 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
   ],
   "timelines": [
     {
-      "id": "story",
+      "id": 3,
       "name": "故事流程",
-      "clock_id": "game_clock",
+      "clock_id": 1,
       "duration": 300,
       "tracks": [
         {
-          "id": "main",
+          "id": 4,
           "name": "主流程",
           "enabled": true,
           "clips": [
             {
-              "id": "puzzle_section",
+              "id": 5,
               "name": "解谜阶段",
               "start": 0,
               "duration": 200,
@@ -307,21 +334,21 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
           ],
           "marks": [
             {
-              "id": "start_puzzle",
+              "id": 6,
               "name": "开始解谜",
               "time": 0,
               "kind": "output",
               "label": "puzzle_start"
             },
             {
-              "id": "wait_puzzle",
+              "id": 7,
               "name": "等待解谜完成",
               "time": 150,
               "kind": "blocking",
               "label": "puzzle_completed"
             },
             {
-              "id": "finish_story",
+              "id": 8,
               "name": "故事完成",
               "time": 200,
               "kind": "output",
@@ -330,11 +357,11 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
           ]
         },
         {
-          "id": "presentation",
+          "id": 9,
           "name": "表现",
           "clips": [
             {
-              "id": "ambient_section",
+              "id": 10,
               "name": "氛围表现",
               "start": 100,
               "duration": 150,
@@ -343,13 +370,13 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
           ],
           "marks": [
             {
-              "id": "ambient_enter",
+              "id": 11,
               "time": 100,
               "kind": "output",
               "label": "ambient_enter"
             },
             {
-              "id": "ambient_leave",
+              "id": 12,
               "time": 250,
               "kind": "output",
               "label": "ambient_leave"
@@ -359,31 +386,31 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
       ],
       "listeners": [
         {
-          "id": "listen_interrupt",
+          "id": 13,
           "name": "紧急中断",
           "label": "urgent_interrupt",
           "enabled": true
         },
         {
-          "id": "listen_desktop_notice",
+          "id": 14,
           "name": "收到桌面通知",
           "label": "desktop_notice"
         }
       ]
     },
     {
-      "id": "desktop",
+      "id": 15,
       "name": "桌面环境",
-      "clock_id": "desktop_clock",
+      "clock_id": 2,
       "duration": null,
       "tracks": [
         {
-          "id": "notifications",
+          "id": 16,
           "name": "通知",
           "clips": [],
           "marks": [
             {
-              "id": "emit_desktop_notice",
+              "id": 17,
               "name": "发出桌面通知",
               "time": 50,
               "kind": "output",
@@ -394,7 +421,7 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
       ],
       "listeners": [
         {
-          "id": "listen_story_finished",
+          "id": 18,
           "name": "接收故事完成",
           "label": "story_finished"
         }
@@ -404,23 +431,24 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
 }
 ~~~
 
-示例中的视觉事件段和所有输出标签、阻塞输入标签、全程输入标签均由文件直接保存。puzzle_section 的长度和解谜处理实例的实际执行时长没有自动对应关系；ambient_section 的边界也不会替代 ambient_enter 和 ambient_leave 输出标记。实际标签绑定到哪些处理类，由配套的程序决定。
+示例中的视觉事件段和所有输出标签、阻塞输入标签、全程输入标签均由文件直接保存。全部对象共用 ID 1 至 18，id_counter 为 18，下次分配的 ID 为 19。“解谜阶段”的长度和解谜处理实例的实际执行时长没有自动对应关系；“氛围表现”的边界也不会替代 ambient_enter 和 ambient_leave 输出标记。实际标签绑定到哪些处理类，由配套的程序决定。
 
 最小的可编辑文档也使用相同结构：
 
 ~~~json
 {
   "name": "新时间轴文档",
+  "id_counter": 2,
   "clocks": [
     {
-      "id": "game_clock",
+      "id": 1,
       "mode": "manual"
     }
   ],
   "timelines": [
     {
-      "id": "main",
-      "clock_id": "game_clock",
+      "id": 2,
+      "clock_id": 1,
       "tracks": [],
       "listeners": []
     }
@@ -436,10 +464,10 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
 
 1. 根对象、数组和字段类型正确；必填字段存在；枚举值正确。
 2. 标记 time 和片段 start 为非负整数，片段 duration 与时间轴有限 duration 为正整数，实时 rate 大于 0。
-3. 时钟 id 在文档内唯一；时间轴 id 在文档内唯一；轨道 id 在所属时间轴内唯一。
-4. 视觉事件段、标记与全程输入的 id 在所属时间轴内共同唯一，便于编辑器定位具体对象。
+3. 所有配置对象的 id 均为正 int，在整份文档内共同唯一，不按类型或时间轴分别编号。
+4. id_counter 为非负 int，不能小于文件中已存在的最大 ID；大于最大 ID 时合法，表示曾有对象被删除等情况。分配溢出仍仅按自增结果为负数检查。
 5. clock_id 引用有效；标记时间和片段结束位置不超出有限时长。
-6. id 和 label 是非空字符串，不含首尾空白。标签按完整字符串、大小写敏感匹配，不隐式重命名。
+6. label 是非空字符串，不含首尾空白。标签按完整字符串、大小写敏感匹配，不隐式重命名；数字 ID 由程序维护。
 7. 所有输出、阻塞输入和全程输入都保留 label；listeners 不包含时间位置。
 8. clips 的 name 非空，color 符合 #RRGGBB；片段不包含标签、脚本或业务生命周期字段。
 9. 文件不包含事件管理器、绑定、类名、脚本路径、方法名和运行时状态。视觉事件段定义属于允许的编排数据。
@@ -448,7 +476,7 @@ time 表示检查和等待的位置，不要求标签恰好在这一时刻产生
 
 程序标签目录和 JSON 不一致属于接入诊断，不是 JSON 语法错误。编辑器应保留原标签并提示问题，不根据当前程序环境删除配置。
 
-加载、编辑和导出必须完整保留全部视觉事件段、标签、禁用项以及轨道顺序。可以补全可选默认值，但不得改变标签含义或把处理绑定写回文件。
+加载、编辑和导出必须完整保留全部视觉事件段、标签、禁用项、轨道顺序及 id_counter。可以补全可选默认值，但不得重新编号、回退计数器、改变标签含义或把处理绑定写回文件。
 
 ## 13. JSON 与压缩 JSON
 
