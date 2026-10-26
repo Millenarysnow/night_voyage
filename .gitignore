@@ -12,6 +12,11 @@
 /addons/night_voyageExt/bin/android/
 /addons/night_voyageExt/bin/ios/
 /addons/night_voyageExt/bin/web/
+
+# NV Timeline 的本机编译产物；源码和 .gdextension 配置进入版本控制，平台 DLL
+# 由本机 CMake 重新生成，避免把 20MB 级调试库写入提交。
+/addons/nv_timeline/bin/
+/addons/nv_timeline/native/bin/
 *.obj
 *.o
 *.pdb

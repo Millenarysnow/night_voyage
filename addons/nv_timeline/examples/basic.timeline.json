@@ -1,0 +1,88 @@
+{
+  "name": "NV Timeline 基础示例",
+  "id_counter": 11,
+  "clocks": [
+    {
+      "id": 1,
+      "name": "游戏时钟",
+      "mode": "manual"
+    }
+  ],
+  "timelines": [
+    {
+      "id": 2,
+      "name": "示例流程",
+      "clock_id": 1,
+      "duration": 40,
+      "tracks": [
+        {
+          "id": 3,
+          "name": "主流程",
+          "enabled": true,
+          "clips": [
+            {
+              "id": 4,
+              "name": "等待玩家操作",
+              "start": 0,
+              "duration": 40,
+              "color": "#568AC8"
+            }
+          ],
+          "marks": [
+            {
+              "id": 5,
+              "name": "流程开始",
+              "time": 0,
+              "kind": "output",
+              "label": "demo_started"
+            },
+            {
+              "id": 6,
+              "name": "等待玩家确认",
+              "time": 10,
+              "kind": "blocking",
+              "label": "demo_confirmed"
+            },
+            {
+              "id": 7,
+              "name": "流程结束",
+              "time": 30,
+              "kind": "output",
+              "label": "demo_finished"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "name": "并行表现",
+          "enabled": true,
+          "clips": [],
+          "marks": [
+            {
+              "id": 9,
+              "name": "表现开始",
+              "time": 5,
+              "kind": "output",
+              "label": "demo_fx_enter"
+            },
+            {
+              "id": 10,
+              "name": "表现结束",
+              "time": 25,
+              "kind": "output",
+              "label": "demo_fx_leave"
+            }
+          ]
+        }
+      ],
+      "listeners": [
+        {
+          "id": 11,
+          "name": "外部中断",
+          "label": "demo_interrupt",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

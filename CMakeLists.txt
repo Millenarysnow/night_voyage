@@ -26,5 +26,11 @@ if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/native/night_voyageExt")
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/native/night_voyageExt SYSTEM)
 endif()
 
+# 时间轴插件复用上面已经生成的 godot::cpp 目标，但源码和产物保持在插件
+# 自己的 addons/nv_timeline 目录内，便于将来单独复制到其他 Godot 项目。
+if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/addons/nv_timeline/native/nv_timeline")
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/addons/nv_timeline/native/nv_timeline SYSTEM)
+endif()
+
 # Prevent Godot from importing build artifacts as project resources
 file(TOUCH "${CMAKE_BINARY_DIR}/.gdignore")

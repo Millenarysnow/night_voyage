@@ -1,0 +1,19 @@
+[configuration]
+
+entry_symbol = "nv_timeline_init"
+compatibility_minimum = "4.8"
+reloadable = false
+
+[libraries]
+
+windows.x86_64.debug = "./bin/windows/nv_timeline.windows.template_debug.x86_64.dll"
+windows.x86_64.release = "./bin/windows/nv_timeline.windows.template_release.x86_64.dll"
+
+linux.x86_64.debug = "./bin/linux/libnv_timeline.linux.template_debug.x86_64.so"
+linux.x86_64.release = "./bin/linux/libnv_timeline.linux.template_release.x86_64.so"
+
+macos.debug = "./bin/macos/libnv_timeline.macos.template_debug.dylib"
+macos.release = "./bin/macos/libnv_timeline.macos.template_release.dylib"
+
+web.wasm32.debug = "./bin/web/libnv_timeline.web.template_debug.wasm32.nothreads.wasm"
+web.wasm32.release = "./bin/web/libnv_timeline.web.template_release.wasm32.nothreads.wasm"
