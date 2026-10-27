@@ -359,6 +359,9 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
 
     if (p_data.has("timelines") && p_data["timelines"].get_type() == Variant::ARRAY) {
         const Array timelines_array = p_data["timelines"];
+        if (timelines_array.size() != 1) {
+            validation_errors.push_back(utf8("root.timelines：每个时间轴文件必须且只能包含一条时间轴"));
+        }
         for (int64_t i = 0; i < timelines_array.size(); ++i) {
             const String path = "root.timelines[" + String::num_int64(i) + "]";
             if (timelines_array[i].get_type() != Variant::DICTIONARY) {

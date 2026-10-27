@@ -396,14 +396,19 @@ void NVTimelineCanvas::draw_item(const VisualItem &p_item, int p_stack_index) {
     }
 
     const float width = std::max(pixels_per_unit, static_cast<float>(duration) * pixels_per_unit);
-    const float lane_top = row_top + 5.0f + static_cast<float>(p_item.lane_index) * 23.0f;
-    const Rect2 block(Vector2(x, lane_top), Vector2(width, 20.0f));
+    // 同一轨道的片段已经禁止重叠，因此正常情况下片段占据整行并在上下留出
+    // 少量边距；异常外部快照仍按 lane_index 向下偏移，避免绘制对象完全重合。
+    const float lane_top = row_top + 4.0f + static_cast<float>(p_item.lane_index) * 23.0f;
+    const float lane_height = std::max(20.0f, row_height - 8.0f -
+            static_cast<float>(p_item.lane_index) * 23.0f);
+    const Rect2 block(Vector2(x, lane_top), Vector2(width, lane_height));
     const Color fill(p_item.color.r, p_item.color.g, p_item.color.b, alpha * 0.72f);
     draw_rect(block, fill, true);
     draw_rect(block, p_item.id == selected_id ? Color(0.96f, 0.96f, 0.98f, alpha) :
             Color(0.72f, 0.78f, 0.84f, alpha), false, p_item.id == selected_id ? 2.0f : 1.0f);
     if (get_theme_default_font().is_valid()) {
-        draw_string(get_theme_default_font(), Vector2(x + 5.0f, lane_top + 14.0f), p_item.name,
+        const float text_y = lane_top + std::min(lane_height - 4.0f, lane_height * 0.5f + 4.0f);
+        draw_string(get_theme_default_font(), Vector2(x + 5.0f, text_y), p_item.name,
                 HORIZONTAL_ALIGNMENT_LEFT, std::max(20.0f, width - 8.0f), 10,
                 Color(0.97f, 0.98f, 0.99f, alpha));
     }
@@ -434,6 +439,18 @@ void NVTimelineCanvas::_draw() {
             const String seconds = String::num_real(static_cast<double>(unit) / 10.0, 1) + " s";
             draw_string(get_theme_default_font(), Vector2(x + 4.0f, 23.0f), seconds,
                     HORIZONTAL_ALIGNMENT_LEFT, 64.0f, 11, Color(0.82f, 0.84f, 0.87f, 1.0f));
+        }
+    }
+
+    // 有限时长之外仍保留少量可滚动空间，方便观察边界；用半透明灰层明确区分
+    // “时间轴有效区间”和画布的剩余背景，不把这部分误认为可编排时间。
+    if (timeline_duration > 0) {
+        const float boundary_x = static_cast<float>(timeline_duration) * pixels_per_unit;
+        if (boundary_x < size.x) {
+            draw_rect(Rect2(Vector2(boundary_x, 0.0f), Vector2(size.x - boundary_x, size.y)),
+                    Color(0.42f, 0.43f, 0.45f, 0.46f), true);
+            draw_line(Vector2(boundary_x, 0.0f), Vector2(boundary_x, size.y),
+                    Color(0.76f, 0.78f, 0.80f, 0.90f), 2.0f);
         }
     }
 
@@ -553,12 +570,9 @@ void NVTimelineEditorWindow::_bind_methods() {
     ClassDB::bind_method(D_METHOD("_on_dirty_confirmed"), &NVTimelineEditorWindow::_on_dirty_confirmed);
     ClassDB::bind_method(D_METHOD("_on_close_requested"), &NVTimelineEditorWindow::_on_close_requested);
     ClassDB::bind_method(D_METHOD("_on_clock_selected", "index"), &NVTimelineEditorWindow::_on_clock_selected);
-    ClassDB::bind_method(D_METHOD("_on_timeline_selected", "index"), &NVTimelineEditorWindow::_on_timeline_selected);
     ClassDB::bind_method(D_METHOD("_on_listener_selected", "index"), &NVTimelineEditorWindow::_on_listener_selected);
     ClassDB::bind_method(D_METHOD("_on_add_clock_pressed"), &NVTimelineEditorWindow::_on_add_clock_pressed);
     ClassDB::bind_method(D_METHOD("_on_remove_clock_pressed"), &NVTimelineEditorWindow::_on_remove_clock_pressed);
-    ClassDB::bind_method(D_METHOD("_on_add_timeline_pressed"), &NVTimelineEditorWindow::_on_add_timeline_pressed);
-    ClassDB::bind_method(D_METHOD("_on_remove_timeline_pressed"), &NVTimelineEditorWindow::_on_remove_timeline_pressed);
     ClassDB::bind_method(D_METHOD("_on_add_track_pressed"), &NVTimelineEditorWindow::_on_add_track_pressed);
     ClassDB::bind_method(D_METHOD("_on_remove_track_pressed"), &NVTimelineEditorWindow::_on_remove_track_pressed);
     ClassDB::bind_method(D_METHOD("_on_move_track_up_pressed"), &NVTimelineEditorWindow::_on_move_track_up_pressed);
@@ -659,26 +673,6 @@ void NVTimelineEditorWindow::build_ui() {
     remove_clock->connect("pressed", Callable(this, "_on_remove_clock_pressed"));
     clock_row->add_child(remove_clock);
 
-    Label *timeline_title = memnew(Label);
-    timeline_title->set_text(utf8("时间轴"));
-    left_panel->add_child(timeline_title);
-    HBoxContainer *timeline_row = memnew(HBoxContainer);
-    left_panel->add_child(timeline_row);
-    timeline_picker = memnew(OptionButton);
-    timeline_picker->set_h_size_flags(Control::SIZE_EXPAND_FILL);
-    timeline_picker->connect("item_selected", Callable(this, "_on_timeline_selected"));
-    timeline_row->add_child(timeline_picker);
-    Button *add_timeline = memnew(Button);
-    add_timeline->set_text("+");
-    add_timeline->set_tooltip_text(utf8("新增時間轴"));
-    add_timeline->connect("pressed", Callable(this, "_on_add_timeline_pressed"));
-    timeline_row->add_child(add_timeline);
-    Button *remove_timeline = memnew(Button);
-    remove_timeline->set_text(utf8("−"));
-    remove_timeline->set_tooltip_text(utf8("删除所选时间轴"));
-    remove_timeline->connect("pressed", Callable(this, "_on_remove_timeline_pressed"));
-    timeline_row->add_child(remove_timeline);
-
     Label *listener_title = memnew(Label);
     listener_title->set_text(utf8("全程输入"));
     left_panel->add_child(listener_title);
@@ -774,7 +768,13 @@ void NVTimelineEditorWindow::build_ui() {
     selection_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
     inspector_panel->add_child(selection_label);
     id_value = memnew(Label);
+    // ID 只用于 JSON 引用和程序内部定位，不作为用户可见的编辑属性。
+    id_value->set_visible(false);
     inspector_panel->add_child(id_value);
+    track_scope_hint = memnew(Label);
+    track_scope_hint->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
+    track_scope_hint->set_visible(false);
+    inspector_panel->add_child(track_scope_hint);
 
     name_edit = memnew(LineEdit);
     name_edit->set_placeholder(utf8("名称"));
@@ -954,22 +954,12 @@ void NVTimelineEditorWindow::refresh_navigation() {
         current_clock_id = 0;
     }
 
-    bool timeline_exists = false;
-    timeline_picker->clear();
-    for (int64_t i = 0; i < timelines.size(); ++i) {
-        const Dictionary timeline = timelines[i];
-        const int id = int(timeline.get("id", 0));
-        timeline_picker->add_item(display_name(timeline, utf8("时间轴 ") + String::num_int64(id)), id);
-        if (id == current_timeline_id) {
-            timeline_picker->select(static_cast<int>(i));
-            timeline_exists = true;
-        }
-    }
-    if (!timeline_exists && !timelines.is_empty()) {
-        current_timeline_id = int(Dictionary(timelines[0]).get("id", 0));
-        timeline_picker->select(0);
-    }
-    if (timelines.is_empty()) {
+    // 文件只允许一条时间轴；名称和时长通过画布左上角的时间轴按钮进入属性面板。
+    if (timelines.size() == 1 && timelines[0].get_type() == Variant::DICTIONARY) {
+        const Dictionary timeline = timelines[0];
+        current_timeline_id = int(timeline.get("id", 0));
+        current_clock_id = int(timeline.get("clock_id", 0));
+    } else {
         current_timeline_id = 0;
     }
 
@@ -1003,12 +993,15 @@ void NVTimelineEditorWindow::refresh_track_headers() {
         child->queue_free();
     }
 
-    // 画布标尺左侧不能留空；这里显示当前时间轴名称，和下方轨道表头保持同一列。
-    // 这样即使时间轴暂时没有轨道，用户也能确认当前正在编辑哪条时间轴。
-    Label *ruler_spacer = memnew(Label);
+    // 画布标尺左侧显示当前时间轴名称，并允许直接点击它选中时间轴对象。
+    // 这样可以从画布入口进入右侧的时长编辑属性，不必先猜测左侧下拉框的作用。
+    Button *ruler_spacer = memnew(Button);
     ruler_spacer->set_text(utf8("时间轴"));
-    ruler_spacer->set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER);
+    ruler_spacer->set_flat(true);
+    ruler_spacer->set_tooltip_text(utf8("选择当前时间轴并编辑总时长"));
     ruler_spacer->set_custom_minimum_size(Vector2(188.0f, NVTimelineCanvas::RULER_HEIGHT));
+    ruler_spacer->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+    ruler_spacer->connect("pressed", Callable(this, "_on_canvas_object_selected").bind(current_timeline_id));
     track_headers->add_child(ruler_spacer);
 
     const Dictionary data = document->get_data();
@@ -1063,6 +1056,8 @@ void NVTimelineEditorWindow::refresh_inspector() {
     apply_button->set_visible(false);
     remove_selected_button->set_visible(false);
     id_value->set_text("");
+    track_scope_hint->set_text("");
+    track_scope_hint->set_visible(false);
 
     ObjectLocation location = get_selected_object();
     if (!location.valid) {
@@ -1071,9 +1066,6 @@ void NVTimelineEditorWindow::refresh_inspector() {
     }
 
     const Dictionary object = location.object;
-    const String object_id = location.type == OBJECT_DOCUMENT ? String() :
-            "ID " + String::num_int64(int(object.get("id", 0)));
-    id_value->set_text(object_id);
     String type_name;
     switch (location.type) {
         case OBJECT_DOCUMENT: type_name = utf8("时间轴文档"); break;
@@ -1113,9 +1105,22 @@ void NVTimelineEditorWindow::refresh_inspector() {
             set_property_row_visibility(unlimited_check, true);
             set_property_row_visibility(duration_spin, true);
         } break;
-        case OBJECT_TRACK:
+        case OBJECT_TRACK: {
+            const Array timelines = document->get_data().get("timelines", Array());
+            const Dictionary timeline = location.timeline_index >= 0 &&
+                    location.timeline_index < timelines.size() ? Dictionary(timelines[location.timeline_index]) : Dictionary();
+            const String timeline_name = display_name(timeline, utf8("当前时间轴"));
+            const Variant timeline_duration = timeline.get("duration", Variant());
+            if (timeline_duration.get_type() == Variant::INT) {
+                track_scope_hint->set_text(utf8("轨道长度由时间轴“") + timeline_name + utf8("”统一控制：") +
+                        String::num_real(double(timeline_duration) / 10.0, 1) + utf8(" 秒。请选择时间轴对象修改。"));
+            } else {
+                track_scope_hint->set_text(utf8("轨道长度由时间轴“") + timeline_name +
+                        utf8("”统一控制：不限时长。请选择时间轴对象修改。"));
+            }
+            track_scope_hint->set_visible(true);
             set_property_row_visibility(enabled_check, true);
-            break;
+        } break;
         case OBJECT_CLIP:
             remove_selected_button->set_text(utf8("删除片段"));
             remove_selected_button->set_visible(true);
@@ -1313,21 +1318,6 @@ void NVTimelineEditorWindow::select_object(int p_id) {
     refresh_inspector();
 }
 
-void NVTimelineEditorWindow::select_first_timeline() {
-    const Array timelines = document->get_data().get("timelines", Array());
-    if (timelines.is_empty()) {
-        current_timeline_id = 0;
-        selected_object_id = 0;
-        refresh_all();
-        return;
-    }
-    const Dictionary timeline = timelines[0];
-    current_timeline_id = int(timeline.get("id", 0));
-    current_clock_id = int(timeline.get("clock_id", 0));
-    selected_object_id = current_timeline_id;
-    refresh_all();
-}
-
 bool NVTimelineEditorWindow::commit_document_data(const Dictionary &p_candidate, const String &p_message) {
     const Dictionary previous = document->get_data().duplicate(true);
     if (previous == p_candidate) {
@@ -1418,28 +1408,28 @@ void NVTimelineEditorWindow::add_default_clock_and_timeline(const String &p_name
     document->create_empty(p_name);
 
     // 新文档中的配置 ID 也必须经过文档分配器生成，不能由编辑器固定写入 1、2。
+    // 单时间轴约束要求时钟和时间轴在同一次候选数据提交中建立，不能先提交一个
+    // 暂时没有时间轴的中间文档。
     const int clock_id = document->allocate_id();
+    const int timeline_id = document->allocate_id();
+    if (clock_id == 0 || timeline_id == 0) {
+        set_status(join_errors(document->get_validation_errors()));
+        return;
+    }
     Dictionary clock;
     clock["id"] = clock_id;
     clock["name"] = utf8("手动时钟");
     clock["mode"] = "manual";
-    Dictionary data = document->get_data();
-    Array clocks;
-    clocks.push_back(clock);
-    data["clocks"] = clocks;
-    if (!document->set_data(data)) {
-        set_status(utf8("创建默认时钟失败：") + join_errors(document->get_validation_errors()));
-        return;
-    }
-
-    const int timeline_id = document->allocate_id();
     Dictionary timeline;
     timeline["id"] = timeline_id;
     timeline["name"] = utf8("主时间轴");
     timeline["clock_id"] = clock_id;
     timeline["tracks"] = Array();
     timeline["listeners"] = Array();
-    data = document->get_data();
+    Dictionary data = document->get_data();
+    Array clocks;
+    clocks.push_back(clock);
+    data["clocks"] = clocks;
     Array timelines;
     timelines.push_back(timeline);
     data["timelines"] = timelines;
@@ -1655,17 +1645,6 @@ void NVTimelineEditorWindow::_on_clock_selected(int p_index) {
     select_object(current_clock_id);
 }
 
-void NVTimelineEditorWindow::_on_timeline_selected(int p_index) {
-    if (refreshing || p_index < 0 || p_index >= timeline_picker->get_item_count()) {
-        return;
-    }
-    current_timeline_id = timeline_picker->get_item_id(p_index);
-    const ObjectLocation location = find_object(current_timeline_id);
-    current_clock_id = location.valid ? int(location.object.get("clock_id", 0)) : 0;
-    playhead_units = 0;
-    select_object(current_timeline_id);
-}
-
 void NVTimelineEditorWindow::_on_listener_selected(int p_index) {
     if (refreshing || p_index < 0 || p_index >= listener_list->get_item_count()) {
         return;
@@ -1710,52 +1689,6 @@ void NVTimelineEditorWindow::_on_remove_clock_pressed() {
         current_clock_id = clocks.is_empty() ? 0 : int(Dictionary(clocks[0]).get("id", 0));
         selected_object_id = 0;
         refresh_all();
-    }
-}
-
-void NVTimelineEditorWindow::_on_add_timeline_pressed() {
-    if (current_clock_id == 0) {
-        set_status(utf8("请先创建一个时钟"));
-        return;
-    }
-    const int id = document->allocate_id();
-    if (id == 0) {
-        set_status(join_errors(document->get_validation_errors()));
-        return;
-    }
-    Dictionary timeline;
-    timeline["id"] = id;
-    timeline["name"] = utf8("新时间轴");
-    timeline["clock_id"] = current_clock_id;
-    timeline["tracks"] = Array();
-    timeline["listeners"] = Array();
-    if (add_object_to_array("timelines", timeline)) {
-        current_timeline_id = id;
-        selected_object_id = id;
-        playhead_units = 0;
-        refresh_all();
-    }
-}
-
-void NVTimelineEditorWindow::_on_remove_timeline_pressed() {
-    const ObjectLocation location = find_object(current_timeline_id);
-    if (!location.valid || location.type != OBJECT_TIMELINE) {
-        set_status(utf8("请先选择要删除的时间轴"));
-        return;
-    }
-    Dictionary data = document->get_data().duplicate(true);
-    Array timelines = data.get("timelines", Array());
-    timelines.remove_at(location.timeline_index);
-    data["timelines"] = timelines;
-    if (commit_document_data(data, utf8("时间轴及其轨道和输入已删除"))) {
-        if (timelines.is_empty()) {
-            current_timeline_id = 0;
-            current_clock_id = 0;
-            selected_object_id = 0;
-            refresh_all();
-        } else {
-            select_first_timeline();
-        }
     }
 }
 

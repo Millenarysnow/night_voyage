@@ -165,12 +165,12 @@ class NVTimelineEditorWindow : public Window {
     Label *document_label = nullptr;
     Label *status_label = nullptr;
     OptionButton *clock_picker = nullptr;
-    OptionButton *timeline_picker = nullptr;
     ItemList *listener_list = nullptr;
     HSlider *zoom_slider = nullptr;
     Label *zoom_label = nullptr;
     Label *selection_label = nullptr;
     Label *id_value = nullptr;
+    Label *track_scope_hint = nullptr;
     LineEdit *name_edit = nullptr;
     CheckBox *enabled_check = nullptr;
     OptionButton *mode_picker = nullptr;
@@ -214,7 +214,6 @@ class NVTimelineEditorWindow : public Window {
     int find_current_timeline_index(const Dictionary &p_data) const;
     int find_current_track_index(const Dictionary &p_timeline) const;
     void select_object(int p_id);
-    void select_first_timeline();
     void populate_property_row(HBoxContainer *p_row, const String &p_title, Control *p_control);
     HBoxContainer *create_property_row(const String &p_title, Control *p_control);
     void set_property_row_visibility(Control *p_control, bool p_visible);
@@ -230,12 +229,9 @@ class NVTimelineEditorWindow : public Window {
     void _on_dirty_confirmed();
     void _on_close_requested();
     void _on_clock_selected(int p_index);
-    void _on_timeline_selected(int p_index);
     void _on_listener_selected(int p_index);
     void _on_add_clock_pressed();
     void _on_remove_clock_pressed();
-    void _on_add_timeline_pressed();
-    void _on_remove_timeline_pressed();
     void _on_add_track_pressed();
     void _on_remove_track_pressed();
     void _on_move_track_up_pressed();
