@@ -408,6 +408,10 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                     }
                     if (track.has("clips") && track["clips"].get_type() == Variant::ARRAY) {
                         const Array clips = track["clips"];
+                        // 一个轨道就是一条连续剪辑轨道：片段可以首尾相接，但不能在
+                        // 同一轨道的时间区间内相互覆盖。把区间检查放在文档层，编辑器、
+                        // 运行时和外部手工编辑的 JSON 都遵守同一条约束。
+                        std::vector<std::pair<int64_t, int64_t>> clip_intervals;
                         for (int64_t c = 0; c < clips.size(); ++c) {
                             const String clip_path = track_path + ".clips[" + String::num_int64(c) + "]";
                             if (clips[c].get_type() != Variant::DICTIONARY) {
@@ -437,6 +441,17 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                                 }
                                 if (timeline_duration > 0 && start + clip_duration > timeline_duration) {
                                     validation_errors.push_back(clip_path + utf8("：片段末端超过时间轴 duration"));
+                                }
+                                if (start >= 0 && clip_duration > 0) {
+                                    const int64_t end = start + clip_duration;
+                                    for (const auto &interval : clip_intervals) {
+                                        if (start < interval.second && interval.first < end) {
+                                            validation_errors.push_back(clip_path +
+                                                    utf8("：同一轨道内的片段不能重叠"));
+                                            break;
+                                        }
+                                    }
+                                    clip_intervals.emplace_back(start, end);
                                 }
                             }
                             if (clip.has("color") && clip["color"].get_type() == Variant::STRING &&

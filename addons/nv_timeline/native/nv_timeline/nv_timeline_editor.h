@@ -96,7 +96,7 @@ public:
     void set_selected_id(int p_id);
     void set_playhead_units(int p_units);
     void set_zoom(float p_zoom);
-    /// 返回按当前重叠片段层数计算出的轨道行高，供左侧轨道表头保持垂直对齐。
+    /// 返回按画布快照计算出的轨道行高，供左侧轨道表头保持垂直对齐。
     float get_track_row_height(int p_track_index) const;
 };
 

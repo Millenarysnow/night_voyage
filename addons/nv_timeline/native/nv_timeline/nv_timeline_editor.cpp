@@ -43,6 +43,73 @@ String display_name(const Dictionary &p_object, const String &p_fallback) {
     return value.is_empty() ? p_fallback : value;
 }
 
+// 在指定播放头之后寻找当前轨道的第一个空闲区间。片段可以首尾相接，
+// 但不会因为连续点击“新增片段”而互相覆盖；有限时间轴的末端也作为硬边界。
+bool find_free_clip_slot(const Array &p_clips, int p_requested_start, int p_requested_duration,
+        int p_timeline_duration, int &r_start, int &r_duration) {
+    std::vector<std::pair<int64_t, int64_t>> intervals;
+    for (int64_t i = 0; i < p_clips.size(); ++i) {
+        if (p_clips[i].get_type() != Variant::DICTIONARY) {
+            continue;
+        }
+        const Dictionary clip = p_clips[i];
+        const int64_t start = int64_t(clip.get("start", 0));
+        const int64_t duration = int64_t(clip.get("duration", 0));
+        if (start >= 0 && duration > 0) {
+            intervals.emplace_back(start, start + duration);
+        }
+    }
+    std::sort(intervals.begin(), intervals.end(), [](const auto &p_left, const auto &p_right) {
+        return p_left.first < p_right.first;
+    });
+
+    const int64_t requested_start = std::max<int64_t>(0, p_requested_start);
+    const int64_t requested_duration = std::max<int64_t>(1, p_requested_duration);
+    int64_t cursor = requested_start;
+    for (const auto &interval : intervals) {
+        if (interval.second <= cursor) {
+            continue;
+        }
+        if (interval.first > cursor) {
+            // 先使用当前片段前面的空档；空档不足默认长度时，缩短新片段填满空档。
+            const int64_t gap = interval.first - cursor;
+            const int64_t duration = std::min(requested_duration, gap);
+            if (duration > 0 && (p_timeline_duration <= 0 || cursor + duration <= p_timeline_duration)) {
+                if (cursor > std::numeric_limits<int32_t>::max() ||
+                        duration > std::numeric_limits<int32_t>::max()) {
+                    return false;
+                }
+                r_start = static_cast<int>(cursor);
+                r_duration = static_cast<int>(duration);
+                return true;
+            }
+        }
+        cursor = std::max(cursor, interval.second);
+    }
+
+    if (p_timeline_duration > 0) {
+        if (cursor >= p_timeline_duration) {
+            return false;
+        }
+        const int64_t available = p_timeline_duration - cursor;
+        const int64_t duration = std::min(requested_duration, available);
+        if (duration <= 0) {
+            return false;
+        }
+        r_start = static_cast<int>(cursor);
+        r_duration = static_cast<int>(duration);
+        return true;
+    }
+
+    if (cursor > std::numeric_limits<int32_t>::max() ||
+            requested_duration > std::numeric_limits<int32_t>::max() - cursor) {
+        return false;
+    }
+    r_start = static_cast<int>(cursor);
+    r_duration = static_cast<int>(requested_duration);
+    return true;
+}
+
 // 插件 JSON 规范使用 #RRGGBB；对旧文档或外部手工修改的错误颜色提供稳定回退。
 Color clip_color(const Dictionary &p_clip) {
     const String value = p_clip.get("color", "#568AC8");
@@ -140,8 +207,8 @@ void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_z
         }
     }
 
-    // 對每條軌道分別執行區間分層：不重疊的片段共用子行，時間範圍相交的
-    // 片段放到不同子行，確保它們都能被看見並可由滑鼠直接命中。
+    // 文档校验器保证同一轨道的片段不重叠，因此正常编辑时每条轨道只有一层；
+    // 这里仍保留防御性分层计算，让外部直接调用画布 API 时也不会相互遮挡。
     std::vector<std::vector<int>> clips_by_track(static_cast<size_t>(track_count));
     for (size_t item_index = 0; item_index < items.size(); ++item_index) {
         if (!items[item_index].is_mark && items[item_index].track_index >= 0 &&
@@ -193,8 +260,8 @@ void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_z
         lane_counts[static_cast<size_t>(track_index)] = static_cast<int>(lane_ends.size());
     }
 
-    // 基础行高保留给时间标记与普通单层片段；重叠片段或同刻标记过多时，
-    // 按实际可见子行数扩展该轨道，避免内容相互遮挡。
+    // 基础行高保留给普通片段与时间标记；外部快照若包含异常重叠数据，
+    // 按实际可见子行数扩展该轨道，避免绘制层相互遮挡。
     float next_row_top = RULER_HEIGHT;
     for (int track_index = 0; track_index < track_count; ++track_index) {
         const float clip_height = 9.0f + static_cast<float>(lane_counts[static_cast<size_t>(track_index)]) * 23.0f;
@@ -936,7 +1003,11 @@ void NVTimelineEditorWindow::refresh_track_headers() {
         child->queue_free();
     }
 
-    Control *ruler_spacer = memnew(Control);
+    // 画布标尺左侧不能留空；这里显示当前时间轴名称，和下方轨道表头保持同一列。
+    // 这样即使时间轴暂时没有轨道，用户也能确认当前正在编辑哪条时间轴。
+    Label *ruler_spacer = memnew(Label);
+    ruler_spacer->set_text(utf8("时间轴"));
+    ruler_spacer->set_vertical_alignment(VERTICAL_ALIGNMENT_CENTER);
     ruler_spacer->set_custom_minimum_size(Vector2(188.0f, NVTimelineCanvas::RULER_HEIGHT));
     track_headers->add_child(ruler_spacer);
 
@@ -947,6 +1018,7 @@ void NVTimelineEditorWindow::refresh_track_headers() {
     }
     const Array timelines = data.get("timelines", Array());
     const Dictionary timeline = timelines[timeline_index];
+    ruler_spacer->set_text(display_name(timeline, utf8("时间轴")));
     const Array tracks = timeline.get("tracks", Array());
     for (int64_t i = 0; i < tracks.size(); ++i) {
         const Dictionary track = tracks[i];
@@ -1805,32 +1877,41 @@ void NVTimelineEditorWindow::_on_add_clip_pressed() {
         set_status(utf8("请先新增一条轨道"));
         return;
     }
-    const int id = document->allocate_id();
-    if (id == 0) {
-        set_status(join_errors(document->get_validation_errors()));
-        return;
-    }
-    Dictionary clip;
-    clip["id"] = id;
-    clip["name"] = utf8("新视觉片段");
-    int clip_start = std::max(0, playhead_units);
-    clip["duration"] = 50;
-    clip["color"] = "#568AC8";
-    if (timeline.has("duration") && timeline["duration"].get_type() == Variant::INT) {
-        // 有限时间轴的终点不属于片段可开始的位置。播放头若停在终点，
-        // 将新片段放到最后一个有效单位，并保证至少覆盖一个 0.1 秒单位。
-        const int timeline_duration = int(timeline["duration"]);
-        clip_start = std::min(clip_start, timeline_duration - 1);
-        clip["duration"] = std::max(1, std::min(50, timeline_duration - clip_start));
-    }
-    clip["start"] = clip_start;
-
     Dictionary data = document->get_data().duplicate(true);
     timelines = data.get("timelines", Array());
     timeline = timelines[timeline_index];
     tracks = timeline.get("tracks", Array());
     Dictionary track = tracks[track_index];
     Array clips = track.get("clips", Array());
+
+    const int timeline_duration = timeline.has("duration") &&
+            timeline["duration"].get_type() == Variant::INT ? int(timeline["duration"]) : -1;
+    int clip_start = 0;
+    int clip_duration = 0;
+    if (!find_free_clip_slot(clips, playhead_units, 50, timeline_duration, clip_start, clip_duration)) {
+        set_status(utf8("当前轨道从播放头起没有可用的空闲区间"));
+        return;
+    }
+
+    const int id = document->allocate_id();
+    if (id == 0) {
+        set_status(join_errors(document->get_validation_errors()));
+        return;
+    }
+    // allocate_id 会推进文档内部的 id_counter；重新复制一次最新数据，避免提交
+    // 候选对象时使用分配 ID 之前的旧计数器而被文档校验器拒绝。
+    data = document->get_data().duplicate(true);
+    timelines = data.get("timelines", Array());
+    timeline = timelines[timeline_index];
+    tracks = timeline.get("tracks", Array());
+    track = tracks[track_index];
+    clips = track.get("clips", Array());
+    Dictionary clip;
+    clip["id"] = id;
+    clip["name"] = utf8("新视觉片段");
+    clip["start"] = clip_start;
+    clip["duration"] = clip_duration;
+    clip["color"] = "#568AC8";
     clips.push_back(clip);
     std::vector<Dictionary> sorted_clips;
     for (int64_t i = 0; i < clips.size(); ++i) {
@@ -1848,7 +1929,10 @@ void NVTimelineEditorWindow::_on_add_clip_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, utf8("视觉片段已新增；片段边界不会触发业务回调"))) {
+    const String add_message = clip_start == std::max(0, playhead_units) ?
+            utf8("视觉片段已新增；片段边界不会触发业务回调") :
+            utf8("视觉片段已新增，并放置到轨道的下一个空闲区间");
+    if (commit_document_data(data, add_message)) {
         selected_object_id = id;
         refresh_all();
     }
@@ -2141,7 +2225,10 @@ void NVTimelineEditorWindow::_on_apply_properties_pressed() {
         timeline["tracks"] = tracks;
         timelines.set(location.timeline_index, timeline);
         data["timelines"] = timelines;
-        commit_document_data(data, utf8("对象属性已应用"));
+        if (!commit_document_data(data, utf8("对象属性已应用"))) {
+            // 文档校验失败时恢复输入框，避免面板暂时显示没有写入 JSON 的非法区间。
+            refresh_all();
+        }
         return;
     }
 
@@ -2203,7 +2290,8 @@ void NVTimelineEditorWindow::_on_canvas_object_moved(int p_object_id, int p_star
     }
     children.set(location.item_index, moved);
 
-    // 轨道数组只排序显示对象，嵌套的 clips 与 marks 仍互相独立且可以重叠。
+    // 轨道数组只排序显示对象；片段之间的重叠由文档校验器拒绝，片段与标签
+    // 标记仍可位于同一时间位置，因为二者没有业务绑定关系。
     std::vector<Dictionary> sorted;
     for (int64_t i = 0; i < children.size(); ++i) {
         sorted.push_back(Dictionary(children[i]));
@@ -2222,7 +2310,10 @@ void NVTimelineEditorWindow::_on_canvas_object_moved(int p_object_id, int p_star
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
     selected_object_id = p_object_id;
-    commit_document_data(data, location.type == OBJECT_CLIP ? utf8("片段位置已更新") : utf8("标签标记位置已更新"));
+    if (!commit_document_data(data, location.type == OBJECT_CLIP ? utf8("片段位置已更新") : utf8("标签标记位置已更新"))) {
+        // 拖动到同轨道已有片段的区间时，保留原对象位置并同步恢复画布选择状态。
+        refresh_all();
+    }
 }
 
 void NVTimelineEditorWindow::_on_canvas_playhead_changed(int p_units) {
