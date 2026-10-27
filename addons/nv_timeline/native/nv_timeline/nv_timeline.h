@@ -38,7 +38,7 @@ public:
     NVTimelineDocument();
 
     /// 创建符合设计稿最小结构的空文档，方便编辑器新建文件。
-    void create_empty(const String &p_name = "新时间轴文档");
+    void create_empty(const String &p_name = String::utf8("新时间轴文档"));
     /// 从 JSON 文本加载并校验；失败时保留原文档并提供诊断。
     bool load_text(const String &p_text);
     /// 从 Godot 路径读取 UTF-8 JSON 文件并加载。

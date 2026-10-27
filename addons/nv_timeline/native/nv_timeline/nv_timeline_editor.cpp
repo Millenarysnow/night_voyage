@@ -31,6 +31,12 @@ namespace godot {
 
 namespace {
 
+// godot-cpp 的 const char* 构造函数按 Latin-1 解码；插件源码统一为 UTF-8，
+// 所有包含非 ASCII 字符的界面文本必须显式通过该函数转换。
+String utf8(const char *p_text) {
+    return String::utf8(p_text);
+}
+
 // 配置字段缺省时只在编辑器显示层提供可读回退值，不把派生文本写回 JSON。
 String display_name(const Dictionary &p_object, const String &p_fallback) {
     const String value = p_object.get("name", p_fallback);
@@ -107,7 +113,7 @@ void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_z
             item.start = int(clip.get("start", 0));
             item.duration = int(clip.get("duration", 1));
             item.enabled_track = enabled;
-            item.name = display_name(clip, "视觉事件段");
+            item.name = display_name(clip, utf8("视觉事件段"));
             item.color = clip_color(clip);
             items.push_back(item);
             maximum_end = std::max(maximum_end, item.start + item.duration);
@@ -126,7 +132,7 @@ void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_z
             item.is_mark = true;
             item.blocking = String(mark.get("kind", "output")) == "blocking";
             item.enabled_track = enabled;
-            item.name = display_name(mark, String(mark.get("label", "标签标记")));
+            item.name = display_name(mark, String(mark.get("label", utf8("标签标记"))));
             item.label = String(mark.get("label", String()));
             item.color = item.blocking ? Color(0.92, 0.61, 0.25, 1.0) : Color(0.38, 0.78, 0.63, 1.0);
             items.push_back(item);
@@ -465,7 +471,7 @@ void NVTimelineEditorWindow::_bind_methods() {
     ClassDB::bind_method(D_METHOD("open_document", "path"), &NVTimelineEditorWindow::open_document);
     ClassDB::bind_method(D_METHOD("save_document", "path"), &NVTimelineEditorWindow::save_document);
     ClassDB::bind_method(D_METHOD("create_new_document", "name"), &NVTimelineEditorWindow::create_new_document,
-            DEFVAL("新时间轴文档"));
+            DEFVAL(utf8("新时间轴文档")));
     ClassDB::bind_method(D_METHOD("get_document_data"), &NVTimelineEditorWindow::get_document_data);
     ClassDB::bind_method(D_METHOD("is_dirty"), &NVTimelineEditorWindow::is_dirty);
     ClassDB::bind_method(D_METHOD("get_current_path"), &NVTimelineEditorWindow::get_current_path);
@@ -540,14 +546,14 @@ void NVTimelineEditorWindow::build_ui() {
         toolbar->add_child(button);
         return button;
     };
-    add_toolbar_button("新建", "_on_new_pressed");
-    add_toolbar_button("打开", "_on_open_pressed");
-    add_toolbar_button("保存", "_on_save_pressed");
-    add_toolbar_button("另存为", "_on_save_as_pressed");
-    undo_button = add_toolbar_button("撤销", "_on_undo_pressed");
-    undo_button->set_tooltip_text("撤销最近一次时间轴编辑");
-    redo_button = add_toolbar_button("重做", "_on_redo_pressed");
-    redo_button->set_tooltip_text("重做最近撤销的时间轴编辑");
+    add_toolbar_button(utf8("新建"), "_on_new_pressed");
+    add_toolbar_button(utf8("打开"), "_on_open_pressed");
+    add_toolbar_button(utf8("保存"), "_on_save_pressed");
+    add_toolbar_button(utf8("另存为"), "_on_save_as_pressed");
+    undo_button = add_toolbar_button(utf8("撤销"), "_on_undo_pressed");
+    undo_button->set_tooltip_text(utf8("撤销最近一次时间轴编辑"));
+    redo_button = add_toolbar_button(utf8("重做"), "_on_redo_pressed");
+    redo_button->set_tooltip_text(utf8("重做最近撤销的时间轴编辑"));
     document_label = memnew(Label);
     document_label->set_h_size_flags(Control::SIZE_EXPAND_FILL);
     document_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
@@ -562,12 +568,12 @@ void NVTimelineEditorWindow::build_ui() {
     main_row->add_child(left_panel);
 
     Button *document_properties = memnew(Button);
-    document_properties->set_text("文档属性");
+    document_properties->set_text(utf8("文档属性"));
     document_properties->connect("pressed", Callable(this, "_on_canvas_object_selected").bind(0));
     left_panel->add_child(document_properties);
 
     Label *clock_title = memnew(Label);
-    clock_title->set_text("逻辑时钟");
+    clock_title->set_text(utf8("逻辑时钟"));
     left_panel->add_child(clock_title);
     HBoxContainer *clock_row = memnew(HBoxContainer);
     left_panel->add_child(clock_row);
@@ -577,17 +583,17 @@ void NVTimelineEditorWindow::build_ui() {
     clock_row->add_child(clock_picker);
     Button *add_clock = memnew(Button);
     add_clock->set_text("+");
-    add_clock->set_tooltip_text("新增逻辑时钟");
+    add_clock->set_tooltip_text(utf8("新增逻辑时钟"));
     add_clock->connect("pressed", Callable(this, "_on_add_clock_pressed"));
     clock_row->add_child(add_clock);
     Button *remove_clock = memnew(Button);
-    remove_clock->set_text("−");
-    remove_clock->set_tooltip_text("删除所选逻辑时钟");
+    remove_clock->set_text(utf8("−"));
+    remove_clock->set_tooltip_text(utf8("删除所选逻辑时钟"));
     remove_clock->connect("pressed", Callable(this, "_on_remove_clock_pressed"));
     clock_row->add_child(remove_clock);
 
     Label *timeline_title = memnew(Label);
-    timeline_title->set_text("时间轴");
+    timeline_title->set_text(utf8("时间轴"));
     left_panel->add_child(timeline_title);
     HBoxContainer *timeline_row = memnew(HBoxContainer);
     left_panel->add_child(timeline_row);
@@ -597,17 +603,17 @@ void NVTimelineEditorWindow::build_ui() {
     timeline_row->add_child(timeline_picker);
     Button *add_timeline = memnew(Button);
     add_timeline->set_text("+");
-    add_timeline->set_tooltip_text("新增時間轴");
+    add_timeline->set_tooltip_text(utf8("新增時間轴"));
     add_timeline->connect("pressed", Callable(this, "_on_add_timeline_pressed"));
     timeline_row->add_child(add_timeline);
     Button *remove_timeline = memnew(Button);
-    remove_timeline->set_text("−");
-    remove_timeline->set_tooltip_text("删除所选时间轴");
+    remove_timeline->set_text(utf8("−"));
+    remove_timeline->set_tooltip_text(utf8("删除所选时间轴"));
     remove_timeline->connect("pressed", Callable(this, "_on_remove_timeline_pressed"));
     timeline_row->add_child(remove_timeline);
 
     Label *listener_title = memnew(Label);
-    listener_title->set_text("全程输入");
+    listener_title->set_text(utf8("全程输入"));
     left_panel->add_child(listener_title);
     listener_list = memnew(ItemList);
     listener_list->set_custom_minimum_size(Vector2(0.0f, 150.0f));
@@ -618,12 +624,12 @@ void NVTimelineEditorWindow::build_ui() {
     HBoxContainer *listener_buttons = memnew(HBoxContainer);
     left_panel->add_child(listener_buttons);
     Button *add_listener = memnew(Button);
-    add_listener->set_text("新增输入");
+    add_listener->set_text(utf8("新增输入"));
     add_listener->set_h_size_flags(Control::SIZE_EXPAND_FILL);
     add_listener->connect("pressed", Callable(this, "_on_add_listener_pressed"));
     listener_buttons->add_child(add_listener);
     Button *remove_listener = memnew(Button);
-    remove_listener->set_text("删除");
+    remove_listener->set_text(utf8("删除"));
     remove_listener->connect("pressed", Callable(this, "_on_remove_listener_pressed"));
     listener_buttons->add_child(remove_listener);
 
@@ -642,15 +648,15 @@ void NVTimelineEditorWindow::build_ui() {
         edit_toolbar->add_child(button);
         return button;
     };
-    add_edit_button("新增轨道", "_on_add_track_pressed", "在当前时间轴末尾新增一条轨道");
-    add_edit_button("删除轨道", "_on_remove_track_pressed", "删除所选轨道及其片段和标记");
-    add_edit_button("上移", "_on_move_track_up_pressed", "将所选轨道上移一行");
-    add_edit_button("下移", "_on_move_track_down_pressed", "将所选轨道下移一行");
-    add_edit_button("新增片段", "_on_add_clip_pressed", "在所选轨道的播放头位置新增纯视觉片段");
-    add_edit_button("输出标记", "_on_add_output_pressed", "在播放头位置新增输出标签标记");
-    add_edit_button("阻塞输入", "_on_add_blocking_pressed", "在播放头位置新增阻塞输入标记");
+    add_edit_button(utf8("新增轨道"), "_on_add_track_pressed", utf8("在当前时间轴末尾新增一条轨道"));
+    add_edit_button(utf8("删除轨道"), "_on_remove_track_pressed", utf8("删除所选轨道及其片段和标记"));
+    add_edit_button(utf8("上移"), "_on_move_track_up_pressed", utf8("将所选轨道上移一行"));
+    add_edit_button(utf8("下移"), "_on_move_track_down_pressed", utf8("将所选轨道下移一行"));
+    add_edit_button(utf8("新增片段"), "_on_add_clip_pressed", utf8("在所选轨道的播放头位置新增纯视觉片段"));
+    add_edit_button(utf8("输出标记"), "_on_add_output_pressed", utf8("在播放头位置新增输出标签标记"));
+    add_edit_button(utf8("阻塞输入"), "_on_add_blocking_pressed", utf8("在播放头位置新增阻塞输入标记"));
     zoom_label = memnew(Label);
-    zoom_label->set_text("缩放");
+    zoom_label->set_text(utf8("缩放"));
     edit_toolbar->add_child(zoom_label);
     zoom_slider = memnew(HSlider);
     zoom_slider->set_custom_minimum_size(Vector2(100.0f, 0.0f));
@@ -690,7 +696,7 @@ void NVTimelineEditorWindow::build_ui() {
     inspector_panel->set_custom_minimum_size(Vector2(272.0f, 0.0f));
     main_row->add_child(inspector_panel);
     Label *inspector_title = memnew(Label);
-    inspector_title->set_text("属性");
+    inspector_title->set_text(utf8("属性"));
     inspector_panel->add_child(inspector_title);
     selection_label = memnew(Label);
     selection_label->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
@@ -699,77 +705,77 @@ void NVTimelineEditorWindow::build_ui() {
     inspector_panel->add_child(id_value);
 
     name_edit = memnew(LineEdit);
-    name_edit->set_placeholder("名称");
-    HBoxContainer *name_row = create_property_row("名称", name_edit);
+    name_edit->set_placeholder(utf8("名称"));
+    HBoxContainer *name_row = create_property_row(utf8("名称"), name_edit);
     inspector_panel->add_child(name_row);
     enabled_check = memnew(CheckBox);
-    enabled_check->set_text("启用");
-    HBoxContainer *enabled_row = create_property_row("状态", enabled_check);
+    enabled_check->set_text(utf8("启用"));
+    HBoxContainer *enabled_row = create_property_row(utf8("状态"), enabled_check);
     inspector_panel->add_child(enabled_row);
     mode_picker = memnew(OptionButton);
-    mode_picker->add_item("手动");
+    mode_picker->add_item(utf8("手动"));
     mode_picker->set_item_id(0, NVTimelineClock::MODE_MANUAL);
-    mode_picker->add_item("实时");
+    mode_picker->add_item(utf8("实时"));
     mode_picker->set_item_id(1, NVTimelineClock::MODE_REALTIME);
-    HBoxContainer *mode_row = create_property_row("模式", mode_picker);
+    HBoxContainer *mode_row = create_property_row(utf8("模式"), mode_picker);
     inspector_panel->add_child(mode_row);
     rate_spin = memnew(SpinBox);
     rate_spin->set_min(0.01);
     rate_spin->set_max(100.0);
     rate_spin->set_step(0.05);
-    HBoxContainer *rate_row = create_property_row("实时倍率", rate_spin);
+    HBoxContainer *rate_row = create_property_row(utf8("实时倍率"), rate_spin);
     inspector_panel->add_child(rate_row);
     timeline_clock_picker = memnew(OptionButton);
-    HBoxContainer *clock_ref_row = create_property_row("绑定时钟", timeline_clock_picker);
+    HBoxContainer *clock_ref_row = create_property_row(utf8("绑定时钟"), timeline_clock_picker);
     inspector_panel->add_child(clock_ref_row);
     unlimited_check = memnew(CheckBox);
-    unlimited_check->set_text("不限时长");
-    HBoxContainer *unlimited_row = create_property_row("时长", unlimited_check);
+    unlimited_check->set_text(utf8("不限时长"));
+    HBoxContainer *unlimited_row = create_property_row(utf8("时长"), unlimited_check);
     inspector_panel->add_child(unlimited_row);
     duration_spin = memnew(SpinBox);
     duration_spin->set_min(1);
     duration_spin->set_max(std::numeric_limits<int32_t>::max());
     duration_spin->set_step(1);
-    HBoxContainer *duration_row = create_property_row("长度（0.1 秒）", duration_spin);
+    HBoxContainer *duration_row = create_property_row(utf8("长度（0.1 秒）"), duration_spin);
     inspector_panel->add_child(duration_row);
     start_spin = memnew(SpinBox);
     start_spin->set_min(0);
     start_spin->set_max(std::numeric_limits<int32_t>::max());
     start_spin->set_step(1);
-    HBoxContainer *start_row = create_property_row("起点（0.1 秒）", start_spin);
+    HBoxContainer *start_row = create_property_row(utf8("起点（0.1 秒）"), start_spin);
     inspector_panel->add_child(start_row);
     time_spin = memnew(SpinBox);
     time_spin->set_min(0);
     time_spin->set_max(std::numeric_limits<int32_t>::max());
     time_spin->set_step(1);
-    HBoxContainer *time_row = create_property_row("时间（0.1 秒）", time_spin);
+    HBoxContainer *time_row = create_property_row(utf8("时间（0.1 秒）"), time_spin);
     inspector_panel->add_child(time_row);
     mark_kind_picker = memnew(OptionButton);
-    mark_kind_picker->add_item("输出标签");
+    mark_kind_picker->add_item(utf8("输出标签"));
     mark_kind_picker->set_item_id(0, 0);
-    mark_kind_picker->add_item("阻塞输入");
+    mark_kind_picker->add_item(utf8("阻塞输入"));
     mark_kind_picker->set_item_id(1, 1);
-    HBoxContainer *kind_row = create_property_row("标记类型", mark_kind_picker);
+    HBoxContainer *kind_row = create_property_row(utf8("标记类型"), mark_kind_picker);
     inspector_panel->add_child(kind_row);
     label_edit = memnew(LineEdit);
-    label_edit->set_placeholder("区分大小写的标签");
-    HBoxContainer *label_row = create_property_row("标签", label_edit);
+    label_edit->set_placeholder(utf8("区分大小写的标签"));
+    HBoxContainer *label_row = create_property_row(utf8("标签"), label_edit);
     inspector_panel->add_child(label_row);
     color_picker = memnew(ColorPickerButton);
     color_picker->set_edit_alpha(false);
-    HBoxContainer *color_row = create_property_row("显示颜色", color_picker);
+    HBoxContainer *color_row = create_property_row(utf8("显示颜色"), color_picker);
     inspector_panel->add_child(color_row);
     apply_button = memnew(Button);
-    apply_button->set_text("应用属性");
+    apply_button->set_text(utf8("应用属性"));
     apply_button->connect("pressed", Callable(this, "_on_apply_properties_pressed"));
     inspector_panel->add_child(apply_button);
     remove_selected_button = memnew(Button);
-    remove_selected_button->set_text("删除所选对象");
+    remove_selected_button->set_text(utf8("删除所选对象"));
     remove_selected_button->connect("pressed", Callable(this, "_on_remove_selected_visual_object_pressed"));
     inspector_panel->add_child(remove_selected_button);
 
     Label *binding_notice = memnew(Label);
-    binding_notice->set_text("标签处理绑定由程序管理；此窗口仅编辑 JSON 标签，不修改处理代码。");
+    binding_notice->set_text(utf8("标签处理绑定由程序管理；此窗口仅编辑 JSON 标签，不修改处理代码。"));
     binding_notice->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
     inspector_panel->add_child(binding_notice);
 
@@ -830,9 +836,9 @@ void NVTimelineEditorWindow::configure_dialogs() {
     add_child(file_dialog);
 
     dirty_dialog = memnew(ConfirmationDialog);
-    dirty_dialog->set_title("未保存的时间轴修改");
-    dirty_dialog->set_text("当前文档有未保存修改。确认将放弃修改；取消后可以继续编辑或先保存。");
-    dirty_dialog->get_ok_button()->set_text("放弃修改");
+    dirty_dialog->set_title(utf8("未保存的时间轴修改"));
+    dirty_dialog->set_text(utf8("当前文档有未保存修改。确认将放弃修改；取消后可以继续编辑或先保存。"));
+    dirty_dialog->get_ok_button()->set_text(utf8("放弃修改"));
     dirty_dialog->connect("confirmed", Callable(this, "_on_dirty_confirmed"));
     add_child(dirty_dialog);
 }
@@ -862,7 +868,7 @@ void NVTimelineEditorWindow::refresh_navigation() {
     for (int64_t i = 0; i < clocks.size(); ++i) {
         const Dictionary clock = clocks[i];
         const int id = int(clock.get("id", 0));
-        clock_picker->add_item(display_name(clock, "时钟 " + String::num_int64(id)), id);
+        clock_picker->add_item(display_name(clock, utf8("时钟 ") + String::num_int64(id)), id);
         if (id == current_clock_id) {
             clock_picker->select(static_cast<int>(i));
             clock_exists = true;
@@ -881,7 +887,7 @@ void NVTimelineEditorWindow::refresh_navigation() {
     for (int64_t i = 0; i < timelines.size(); ++i) {
         const Dictionary timeline = timelines[i];
         const int id = int(timeline.get("id", 0));
-        timeline_picker->add_item(display_name(timeline, "时间轴 " + String::num_int64(id)), id);
+        timeline_picker->add_item(display_name(timeline, utf8("时间轴 ") + String::num_int64(id)), id);
         if (id == current_timeline_id) {
             timeline_picker->select(static_cast<int>(i));
             timeline_exists = true;
@@ -904,9 +910,9 @@ void NVTimelineEditorWindow::refresh_navigation() {
             const Dictionary listener = listeners[i];
             const int id = int(listener.get("id", 0));
             const bool enabled = !listener.has("enabled") || bool(listener["enabled"]);
-            const String state = enabled ? "" : "（禁用）";
-            listener_list->add_item(state + display_name(listener, String(listener.get("label", "输入"))) +
-                    "   ·   " + String(listener.get("label", String())));
+            const String state = enabled ? "" : utf8("（禁用）");
+            listener_list->add_item(state + display_name(listener, String(listener.get("label", utf8("输入")))) +
+                    utf8("   ·   ") + String(listener.get("label", String())));
             listener_list->set_item_metadata(static_cast<int>(i), id);
             if (id == selected_object_id) {
                 listener_list->select(static_cast<int>(i));
@@ -914,7 +920,7 @@ void NVTimelineEditorWindow::refresh_navigation() {
         }
     }
 
-    const String name = String(data.get("name", "新时间轴文档"));
+    const String name = String(data.get("name", utf8("新时间轴文档")));
     document_label->set_text(name);
 }
 
@@ -943,12 +949,12 @@ void NVTimelineEditorWindow::refresh_track_headers() {
         HBoxContainer *row = memnew(HBoxContainer);
         row->set_custom_minimum_size(Vector2(188.0f, canvas->get_track_row_height(static_cast<int>(i))));
         CheckBox *enabled = memnew(CheckBox);
-        enabled->set_tooltip_text("轨道是否参与运行时标签输出和阻塞处理");
+        enabled->set_tooltip_text(utf8("轨道是否参与运行时标签输出和阻塞处理"));
         enabled->set_pressed(!track.has("enabled") || bool(track["enabled"]));
         enabled->connect("toggled", Callable(this, "_on_track_enabled_toggled").bind(id));
         row->add_child(enabled);
         Button *select = memnew(Button);
-        select->set_text(display_name(track, "轨道 " + String::num_int64(id)));
+        select->set_text(display_name(track, utf8("轨道 ") + String::num_int64(id)));
         select->set_toggle_mode(true);
         select->set_pressed(id == selected_object_id);
         select->set_h_size_flags(Control::SIZE_EXPAND_FILL);
@@ -983,7 +989,7 @@ void NVTimelineEditorWindow::refresh_inspector() {
 
     ObjectLocation location = get_selected_object();
     if (!location.valid) {
-        selection_label->set_text("未选择对象");
+        selection_label->set_text(utf8("未选择对象"));
         return;
     }
 
@@ -993,17 +999,17 @@ void NVTimelineEditorWindow::refresh_inspector() {
     id_value->set_text(object_id);
     String type_name;
     switch (location.type) {
-        case OBJECT_DOCUMENT: type_name = "时间轴文档"; break;
-        case OBJECT_CLOCK: type_name = "逻辑时钟"; break;
-        case OBJECT_TIMELINE: type_name = "时间轴"; break;
-        case OBJECT_TRACK: type_name = "轨道"; break;
-        case OBJECT_CLIP: type_name = "视觉事件段"; break;
-        case OBJECT_MARK: type_name = "标签标记"; break;
-        case OBJECT_LISTENER: type_name = "全程输入"; break;
+        case OBJECT_DOCUMENT: type_name = utf8("时间轴文档"); break;
+        case OBJECT_CLOCK: type_name = utf8("逻辑时钟"); break;
+        case OBJECT_TIMELINE: type_name = utf8("时间轴"); break;
+        case OBJECT_TRACK: type_name = utf8("轨道"); break;
+        case OBJECT_CLIP: type_name = utf8("视觉事件段"); break;
+        case OBJECT_MARK: type_name = utf8("标签标记"); break;
+        case OBJECT_LISTENER: type_name = utf8("全程输入"); break;
     }
     selection_label->set_text(type_name);
     name_edit->set_text(String(object.get("name", location.type == OBJECT_DOCUMENT ?
-            "新时间轴文档" : String(object.get("label", String())))));
+            utf8("新时间轴文档") : String(object.get("label", String())))));
     set_property_row_visibility(name_edit, true);
 
     const bool enabled = !object.has("enabled") || bool(object["enabled"]);
@@ -1034,7 +1040,7 @@ void NVTimelineEditorWindow::refresh_inspector() {
             set_property_row_visibility(enabled_check, true);
             break;
         case OBJECT_CLIP:
-            remove_selected_button->set_text("删除片段");
+            remove_selected_button->set_text(utf8("删除片段"));
             remove_selected_button->set_visible(true);
             start_spin->set_value(int(object.get("start", 0)));
             duration_spin->set_value(int(object.get("duration", 1)));
@@ -1044,7 +1050,7 @@ void NVTimelineEditorWindow::refresh_inspector() {
             set_property_row_visibility(color_picker, true);
             break;
         case OBJECT_MARK: {
-            remove_selected_button->set_text("删除标记");
+            remove_selected_button->set_text(utf8("删除标记"));
             remove_selected_button->set_visible(true);
             time_spin->set_value(int(object.get("time", 0)));
             const bool blocking = String(object.get("kind", "output")) == "blocking";
@@ -1067,19 +1073,19 @@ void NVTimelineEditorWindow::update_window_title() {
     const Dictionary data = document->get_data();
     String title = String(data.get("name", "NV Timeline"));
     if (!current_path.is_empty()) {
-        title += " — " + current_path.get_file();
+        title += utf8(" — ") + current_path.get_file();
     }
     if (dirty) {
         title += " *";
     }
-    set_title("NV Timeline · " + title);
+    set_title(utf8("NV Timeline · ") + title);
     document_label->set_text(title);
 }
 
 void NVTimelineEditorWindow::set_status(const String &p_message) {
     status_message = p_message;
     const double seconds = static_cast<double>(playhead_units) / 10.0;
-    status_label->set_text(status_message + "    播放头：" + String::num_real(seconds, 1) + " 秒");
+    status_label->set_text(status_message + utf8("    播放头：") + String::num_real(seconds, 1) + utf8(" 秒"));
 }
 
 void NVTimelineEditorWindow::rebuild_clock_options(OptionButton *p_picker, int p_selected_id) {
@@ -1089,7 +1095,7 @@ void NVTimelineEditorWindow::rebuild_clock_options(OptionButton *p_picker, int p
     for (int64_t i = 0; i < clocks.size(); ++i) {
         const Dictionary clock = clocks[i];
         const int id = int(clock.get("id", 0));
-        p_picker->add_item(display_name(clock, "时钟 " + String::num_int64(id)), id);
+        p_picker->add_item(display_name(clock, utf8("时钟 ") + String::num_int64(id)), id);
         if (id == p_selected_id) {
             selected_index = static_cast<int>(i);
         }
@@ -1248,11 +1254,11 @@ void NVTimelineEditorWindow::select_first_timeline() {
 bool NVTimelineEditorWindow::commit_document_data(const Dictionary &p_candidate, const String &p_message) {
     const Dictionary previous = document->get_data().duplicate(true);
     if (previous == p_candidate) {
-        set_status("没有需要提交的属性变更");
+        set_status(utf8("没有需要提交的属性变更"));
         return true;
     }
     if (!document->set_data(p_candidate.duplicate(true))) {
-        set_status("未应用修改：\n" + join_errors(document->get_validation_errors()));
+        set_status(utf8("未应用修改：\n") + join_errors(document->get_validation_errors()));
         return false;
     }
     // 每个成功编辑只记录一次前态；限制历史长度避免大文档反复深拷贝占用内存。
@@ -1273,15 +1279,15 @@ bool NVTimelineEditorWindow::replace_object(const ObjectLocation &p_location, co
     }
     Dictionary data = document->get_data().duplicate(true);
     if (p_location.type == OBJECT_DOCUMENT) {
-        data["name"] = p_object.get("name", String("新时间轴文档"));
-        return commit_document_data(data, "文档属性已修改");
+        data["name"] = p_object.get("name", String(utf8("新时间轴文档")));
+        return commit_document_data(data, utf8("文档属性已修改"));
     }
 
     if (p_location.type == OBJECT_CLOCK) {
         Array clocks = data.get("clocks", Array());
         clocks.set(p_location.clock_index, p_object);
         data["clocks"] = clocks;
-        return commit_document_data(data, "时钟属性已修改");
+        return commit_document_data(data, utf8("时钟属性已修改"));
     }
 
     Array timelines = data.get("timelines", Array());
@@ -1289,7 +1295,7 @@ bool NVTimelineEditorWindow::replace_object(const ObjectLocation &p_location, co
     if (p_location.type == OBJECT_TIMELINE) {
         timelines.set(p_location.timeline_index, p_object);
         data["timelines"] = timelines;
-        return commit_document_data(data, "时间轴属性已修改");
+        return commit_document_data(data, utf8("时间轴属性已修改"));
     }
 
     if (p_location.type == OBJECT_LISTENER) {
@@ -1312,7 +1318,7 @@ bool NVTimelineEditorWindow::replace_object(const ObjectLocation &p_location, co
     }
     timelines.set(p_location.timeline_index, timeline);
     data["timelines"] = timelines;
-    return commit_document_data(data, "对象属性已修改");
+    return commit_document_data(data, utf8("对象属性已修改"));
 }
 
 bool NVTimelineEditorWindow::add_object_to_array(const String &p_array_key, const Dictionary &p_object) {
@@ -1320,7 +1326,7 @@ bool NVTimelineEditorWindow::add_object_to_array(const String &p_array_key, cons
     Array values = data.get(p_array_key, Array());
     values.push_back(p_object);
     data[p_array_key] = values;
-    return commit_document_data(data, "已新增对象");
+    return commit_document_data(data, utf8("已新增对象"));
 }
 
 void NVTimelineEditorWindow::mark_dirty_and_refresh(const String &p_message) {
@@ -1338,21 +1344,21 @@ void NVTimelineEditorWindow::add_default_clock_and_timeline(const String &p_name
     const int clock_id = document->allocate_id();
     Dictionary clock;
     clock["id"] = clock_id;
-    clock["name"] = "手动时钟";
+    clock["name"] = utf8("手动时钟");
     clock["mode"] = "manual";
     Dictionary data = document->get_data();
     Array clocks;
     clocks.push_back(clock);
     data["clocks"] = clocks;
     if (!document->set_data(data)) {
-        set_status("创建默认时钟失败：" + join_errors(document->get_validation_errors()));
+        set_status(utf8("创建默认时钟失败：") + join_errors(document->get_validation_errors()));
         return;
     }
 
     const int timeline_id = document->allocate_id();
     Dictionary timeline;
     timeline["id"] = timeline_id;
-    timeline["name"] = "主时间轴";
+    timeline["name"] = utf8("主时间轴");
     timeline["clock_id"] = clock_id;
     timeline["tracks"] = Array();
     timeline["listeners"] = Array();
@@ -1361,7 +1367,7 @@ void NVTimelineEditorWindow::add_default_clock_and_timeline(const String &p_name
     timelines.push_back(timeline);
     data["timelines"] = timelines;
     if (!document->set_data(data)) {
-        set_status("创建默认时间轴失败：" + join_errors(document->get_validation_errors()));
+        set_status(utf8("创建默认时间轴失败：") + join_errors(document->get_validation_errors()));
         return;
     }
 
@@ -1373,7 +1379,7 @@ void NVTimelineEditorWindow::add_default_clock_and_timeline(const String &p_name
     playhead_units = 0;
     saved_data = document->get_data().duplicate(true);
     refresh_all();
-    set_status("新文档已创建");
+    set_status(utf8("新文档已创建"));
 }
 
 void NVTimelineEditorWindow::create_new_document(const String &p_name) {
@@ -1384,7 +1390,7 @@ bool NVTimelineEditorWindow::open_document(const String &p_path) {
     Ref<NVTimelineDocument> candidate;
     candidate.instantiate();
     if (!candidate->load_file(p_path)) {
-        set_status("无法打开文档：\n" + join_errors(candidate->get_validation_errors()));
+        set_status(utf8("无法打开文档：\n") + join_errors(candidate->get_validation_errors()));
         return false;
     }
 
@@ -1407,24 +1413,24 @@ bool NVTimelineEditorWindow::open_document(const String &p_path) {
         selected_object_id = 0;
     }
     refresh_all();
-    set_status("已打开并校验时间轴文档");
+    set_status(utf8("已打开并校验时间轴文档"));
     return true;
 }
 
 bool NVTimelineEditorWindow::save_document(const String &p_path) {
     if (document.is_null() || !document->is_valid()) {
-        set_status("无法保存：当前文档尚未通过校验");
+        set_status(utf8("无法保存：当前文档尚未通过校验"));
         return false;
     }
     if (!document->save_file(p_path, true)) {
-        set_status("保存失败：" + p_path);
+        set_status(utf8("保存失败：") + p_path);
         return false;
     }
     current_path = p_path;
     saved_data = document->get_data().duplicate(true);
     dirty = false;
     refresh_all();
-    set_status("已保存：" + p_path);
+    set_status(utf8("已保存：") + p_path);
     return true;
 }
 
@@ -1464,7 +1470,7 @@ void NVTimelineEditorWindow::perform_pending_action() {
 void NVTimelineEditorWindow::show_file_dialog(bool p_saving) {
     file_dialog_saving = p_saving;
     file_dialog->set_file_mode(p_saving ? FileDialog::FILE_MODE_SAVE_FILE : FileDialog::FILE_MODE_OPEN_FILE);
-    file_dialog->set_title(p_saving ? "保存时间轴文档" : "打开时间轴文档");
+    file_dialog->set_title(p_saving ? utf8("保存时间轴文档") : utf8("打开时间轴文档"));
     file_dialog->set_current_dir("res://");
     if (!current_path.is_empty()) {
         file_dialog->set_current_file(current_path.get_file());
@@ -1496,7 +1502,7 @@ void NVTimelineEditorWindow::_on_save_as_pressed() {
 
 void NVTimelineEditorWindow::_on_undo_pressed() {
     if (undo_history.empty()) {
-        set_status("没有可撤销的编辑操作");
+        set_status(utf8("没有可撤销的编辑操作"));
         return;
     }
     const Dictionary current = document->get_data().duplicate(true);
@@ -1506,7 +1512,7 @@ void NVTimelineEditorWindow::_on_undo_pressed() {
         // 快照来自曾经通过同一文档校验器的数据；如果后续规范变化导致失败，
         // 仍将快照放回历史栈，避免一次失败操作丢失可恢复内容。
         undo_history.push_back(previous);
-        set_status("撤销失败：\n" + join_errors(document->get_validation_errors()));
+        set_status(utf8("撤销失败：\n") + join_errors(document->get_validation_errors()));
         return;
     }
     redo_history.push_back(current);
@@ -1515,12 +1521,12 @@ void NVTimelineEditorWindow::_on_undo_pressed() {
         selected_object_id = find_object(current_timeline_id).valid ? current_timeline_id : 0;
     }
     refresh_all();
-    set_status("已撤销");
+    set_status(utf8("已撤销"));
 }
 
 void NVTimelineEditorWindow::_on_redo_pressed() {
     if (redo_history.empty()) {
-        set_status("没有可重做的编辑操作");
+        set_status(utf8("没有可重做的编辑操作"));
         return;
     }
     const Dictionary current = document->get_data().duplicate(true);
@@ -1528,7 +1534,7 @@ void NVTimelineEditorWindow::_on_redo_pressed() {
     redo_history.pop_back();
     if (!document->set_data(next)) {
         redo_history.push_back(next);
-        set_status("重做失败：\n" + join_errors(document->get_validation_errors()));
+        set_status(utf8("重做失败：\n") + join_errors(document->get_validation_errors()));
         return;
     }
     undo_history.push_back(current);
@@ -1537,7 +1543,7 @@ void NVTimelineEditorWindow::_on_redo_pressed() {
         selected_object_id = find_object(current_timeline_id).valid ? current_timeline_id : 0;
     }
     refresh_all();
-    set_status("已重做");
+    set_status(utf8("已重做"));
 }
 
 void NVTimelineEditorWindow::_on_file_selected(const String &p_path) {
@@ -1598,7 +1604,7 @@ void NVTimelineEditorWindow::_on_add_clock_pressed() {
     }
     Dictionary clock;
     clock["id"] = id;
-    clock["name"] = "新时钟";
+    clock["name"] = utf8("新时钟");
     clock["mode"] = "manual";
     if (add_object_to_array("clocks", clock)) {
         current_clock_id = id;
@@ -1609,13 +1615,13 @@ void NVTimelineEditorWindow::_on_add_clock_pressed() {
 void NVTimelineEditorWindow::_on_remove_clock_pressed() {
     const ObjectLocation location = find_object(current_clock_id);
     if (!location.valid || location.type != OBJECT_CLOCK) {
-        set_status("请先选择要删除的时钟");
+        set_status(utf8("请先选择要删除的时钟"));
         return;
     }
     const Array timelines = document->get_data().get("timelines", Array());
     for (int64_t i = 0; i < timelines.size(); ++i) {
         if (int(Dictionary(timelines[i]).get("clock_id", 0)) == current_clock_id) {
-            set_status("该时钟仍被时间轴引用，请先为这些时间轴更换时钟");
+            set_status(utf8("该时钟仍被时间轴引用，请先为这些时间轴更换时钟"));
             return;
         }
     }
@@ -1623,7 +1629,7 @@ void NVTimelineEditorWindow::_on_remove_clock_pressed() {
     Array clocks = data.get("clocks", Array());
     clocks.remove_at(location.clock_index);
     data["clocks"] = clocks;
-    if (commit_document_data(data, "时钟已删除")) {
+    if (commit_document_data(data, utf8("时钟已删除"))) {
         current_clock_id = clocks.is_empty() ? 0 : int(Dictionary(clocks[0]).get("id", 0));
         selected_object_id = 0;
         refresh_all();
@@ -1632,7 +1638,7 @@ void NVTimelineEditorWindow::_on_remove_clock_pressed() {
 
 void NVTimelineEditorWindow::_on_add_timeline_pressed() {
     if (current_clock_id == 0) {
-        set_status("请先创建一个时钟");
+        set_status(utf8("请先创建一个时钟"));
         return;
     }
     const int id = document->allocate_id();
@@ -1642,7 +1648,7 @@ void NVTimelineEditorWindow::_on_add_timeline_pressed() {
     }
     Dictionary timeline;
     timeline["id"] = id;
-    timeline["name"] = "新时间轴";
+    timeline["name"] = utf8("新时间轴");
     timeline["clock_id"] = current_clock_id;
     timeline["tracks"] = Array();
     timeline["listeners"] = Array();
@@ -1657,14 +1663,14 @@ void NVTimelineEditorWindow::_on_add_timeline_pressed() {
 void NVTimelineEditorWindow::_on_remove_timeline_pressed() {
     const ObjectLocation location = find_object(current_timeline_id);
     if (!location.valid || location.type != OBJECT_TIMELINE) {
-        set_status("请先选择要删除的时间轴");
+        set_status(utf8("请先选择要删除的时间轴"));
         return;
     }
     Dictionary data = document->get_data().duplicate(true);
     Array timelines = data.get("timelines", Array());
     timelines.remove_at(location.timeline_index);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "时间轴及其轨道和输入已删除")) {
+    if (commit_document_data(data, utf8("时间轴及其轨道和输入已删除"))) {
         if (timelines.is_empty()) {
             current_timeline_id = 0;
             current_clock_id = 0;
@@ -1679,7 +1685,7 @@ void NVTimelineEditorWindow::_on_remove_timeline_pressed() {
 void NVTimelineEditorWindow::_on_add_track_pressed() {
     const int timeline_index = find_current_timeline_index(document->get_data());
     if (timeline_index < 0) {
-        set_status("请先创建或选择一条时间轴");
+        set_status(utf8("请先创建或选择一条时间轴"));
         return;
     }
     const int id = document->allocate_id();
@@ -1689,7 +1695,7 @@ void NVTimelineEditorWindow::_on_add_track_pressed() {
     }
     Dictionary track;
     track["id"] = id;
-    track["name"] = "新轨道";
+    track["name"] = utf8("新轨道");
     track["enabled"] = true;
     track["clips"] = Array();
     track["marks"] = Array();
@@ -1702,7 +1708,7 @@ void NVTimelineEditorWindow::_on_add_track_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "轨道已新增")) {
+    if (commit_document_data(data, utf8("轨道已新增"))) {
         selected_object_id = id;
         refresh_all();
     }
@@ -1712,7 +1718,7 @@ void NVTimelineEditorWindow::_on_remove_track_pressed() {
     const ObjectLocation location = find_object(selected_object_id);
     if (!location.valid || location.type != OBJECT_TRACK || location.timeline_index !=
             find_current_timeline_index(document->get_data())) {
-        set_status("请先在轨道列表中选择要删除的轨道");
+        set_status(utf8("请先在轨道列表中选择要删除的轨道"));
         return;
     }
     Dictionary data = document->get_data().duplicate(true);
@@ -1723,7 +1729,7 @@ void NVTimelineEditorWindow::_on_remove_track_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "轨道及其视觉对象已删除")) {
+    if (commit_document_data(data, utf8("轨道及其视觉对象已删除"))) {
         selected_object_id = current_timeline_id;
         refresh_all();
     }
@@ -1733,7 +1739,7 @@ void NVTimelineEditorWindow::_on_move_track_up_pressed() {
     const ObjectLocation location = find_object(selected_object_id);
     if (!location.valid || location.type != OBJECT_TRACK || location.track_index <= 0 ||
             location.timeline_index != find_current_timeline_index(document->get_data())) {
-        set_status("所选轨道已经位于顶部");
+        set_status(utf8("所选轨道已经位于顶部"));
         return;
     }
     Dictionary data = document->get_data().duplicate(true);
@@ -1746,14 +1752,14 @@ void NVTimelineEditorWindow::_on_move_track_up_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
-    commit_document_data(data, "轨道顺序已更新");
+    commit_document_data(data, utf8("轨道顺序已更新"));
 }
 
 void NVTimelineEditorWindow::_on_move_track_down_pressed() {
     const ObjectLocation location = find_object(selected_object_id);
     if (!location.valid || location.type != OBJECT_TRACK || location.timeline_index !=
             find_current_timeline_index(document->get_data())) {
-        set_status("请先选择一条轨道");
+        set_status(utf8("请先选择一条轨道"));
         return;
     }
     Dictionary data = document->get_data().duplicate(true);
@@ -1761,7 +1767,7 @@ void NVTimelineEditorWindow::_on_move_track_down_pressed() {
     Dictionary timeline = timelines[location.timeline_index];
     Array tracks = timeline.get("tracks", Array());
     if (location.track_index + 1 >= tracks.size()) {
-        set_status("所选轨道已经位于底部");
+        set_status(utf8("所选轨道已经位于底部"));
         return;
     }
     const Variant moving = tracks[location.track_index];
@@ -1770,13 +1776,13 @@ void NVTimelineEditorWindow::_on_move_track_down_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
-    commit_document_data(data, "轨道顺序已更新");
+    commit_document_data(data, utf8("轨道顺序已更新"));
 }
 
 void NVTimelineEditorWindow::_on_add_clip_pressed() {
     int timeline_index = find_current_timeline_index(document->get_data());
     if (timeline_index < 0) {
-        set_status("请先创建或选择一条时间轴");
+        set_status(utf8("请先创建或选择一条时间轴"));
         return;
     }
     Array timelines = document->get_data().get("timelines", Array());
@@ -1791,7 +1797,7 @@ void NVTimelineEditorWindow::_on_add_clip_pressed() {
     }
     const int track_index = find_current_track_index(timeline);
     if (track_index < 0 || track_index >= tracks.size()) {
-        set_status("请先新增一条轨道");
+        set_status(utf8("请先新增一条轨道"));
         return;
     }
     const int id = document->allocate_id();
@@ -1801,7 +1807,7 @@ void NVTimelineEditorWindow::_on_add_clip_pressed() {
     }
     Dictionary clip;
     clip["id"] = id;
-    clip["name"] = "新视觉片段";
+    clip["name"] = utf8("新视觉片段");
     int clip_start = std::max(0, playhead_units);
     clip["duration"] = 50;
     clip["color"] = "#568AC8";
@@ -1837,7 +1843,7 @@ void NVTimelineEditorWindow::_on_add_clip_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "视觉片段已新增；片段边界不会触发业务回调")) {
+    if (commit_document_data(data, utf8("视觉片段已新增；片段边界不会触发业务回调"))) {
         selected_object_id = id;
         refresh_all();
     }
@@ -1847,7 +1853,7 @@ void NVTimelineEditorWindow::_on_add_output_pressed() {
     auto add_mark = [this](const String &p_kind, const String &p_label, const String &p_name) {
         int timeline_index = find_current_timeline_index(document->get_data());
         if (timeline_index < 0) {
-            set_status("请先创建或选择一条时间轴");
+            set_status(utf8("请先创建或选择一条时间轴"));
             return;
         }
         Array timelines = document->get_data().get("timelines", Array());
@@ -1862,7 +1868,7 @@ void NVTimelineEditorWindow::_on_add_output_pressed() {
         }
         const int track_index = find_current_track_index(timeline);
         if (track_index < 0 || track_index >= tracks.size()) {
-            set_status("请先新增一条轨道");
+            set_status(utf8("请先新增一条轨道"));
             return;
         }
         const int id = document->allocate_id();
@@ -1900,19 +1906,19 @@ void NVTimelineEditorWindow::_on_add_output_pressed() {
         timeline["tracks"] = tracks;
         timelines.set(timeline_index, timeline);
         data["timelines"] = timelines;
-        if (commit_document_data(data, p_kind == "blocking" ? "阻塞输入标记已新增" : "输出标签标记已新增")) {
+        if (commit_document_data(data, p_kind == "blocking" ? utf8("阻塞输入标记已新增") : utf8("输出标签标记已新增"))) {
             selected_object_id = id;
             refresh_all();
         }
     };
-    add_mark("output", "new_output_label", "新输出标签");
+    add_mark("output", "new_output_label", utf8("新输出标签"));
 }
 
 void NVTimelineEditorWindow::_on_add_blocking_pressed() {
     // 与输出标记共享相同的数据结构编辑流程，二者仅由 JSON 中的 kind 区分。
     const int timeline_index = find_current_timeline_index(document->get_data());
     if (timeline_index < 0) {
-        set_status("请先创建或选择一条时间轴");
+        set_status(utf8("请先创建或选择一条时间轴"));
         return;
     }
     Array timelines = document->get_data().get("timelines", Array());
@@ -1926,7 +1932,7 @@ void NVTimelineEditorWindow::_on_add_blocking_pressed() {
     }
     const int track_index = find_current_track_index(timeline);
     if (track_index < 0 || track_index >= tracks.size()) {
-        set_status("请先新增一条轨道");
+        set_status(utf8("请先新增一条轨道"));
         return;
     }
     const int id = document->allocate_id();
@@ -1936,7 +1942,7 @@ void NVTimelineEditorWindow::_on_add_blocking_pressed() {
     }
     Dictionary mark;
     mark["id"] = id;
-    mark["name"] = "新的阻塞输入";
+    mark["name"] = utf8("新的阻塞输入");
     mark["time"] = playhead_units;
     mark["kind"] = "blocking";
     mark["label"] = "new_blocking_label";
@@ -1963,7 +1969,7 @@ void NVTimelineEditorWindow::_on_add_blocking_pressed() {
     timeline["tracks"] = tracks;
     timelines.set(find_current_timeline_index(data), timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "阻塞输入标记已新增")) {
+    if (commit_document_data(data, utf8("阻塞输入标记已新增"))) {
         selected_object_id = id;
         refresh_all();
     }
@@ -1972,7 +1978,7 @@ void NVTimelineEditorWindow::_on_add_blocking_pressed() {
 void NVTimelineEditorWindow::_on_add_listener_pressed() {
     const int timeline_index = find_current_timeline_index(document->get_data());
     if (timeline_index < 0) {
-        set_status("请先创建或选择一条时间轴");
+        set_status(utf8("请先创建或选择一条时间轴"));
         return;
     }
     const int id = document->allocate_id();
@@ -1982,7 +1988,7 @@ void NVTimelineEditorWindow::_on_add_listener_pressed() {
     }
     Dictionary listener;
     listener["id"] = id;
-    listener["name"] = "新全程输入";
+    listener["name"] = utf8("新全程输入");
     listener["label"] = "new_listener_label";
     listener["enabled"] = true;
 
@@ -1994,7 +2000,7 @@ void NVTimelineEditorWindow::_on_add_listener_pressed() {
     timeline["listeners"] = listeners;
     timelines.set(timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "全程输入已新增")) {
+    if (commit_document_data(data, utf8("全程输入已新增"))) {
         selected_object_id = id;
         refresh_all();
     }
@@ -2004,7 +2010,7 @@ void NVTimelineEditorWindow::_on_remove_listener_pressed() {
     const ObjectLocation location = find_object(selected_object_id);
     if (!location.valid || location.type != OBJECT_LISTENER || location.timeline_index !=
             find_current_timeline_index(document->get_data())) {
-        set_status("请先选择要删除的全程输入");
+        set_status(utf8("请先选择要删除的全程输入"));
         return;
     }
     Dictionary data = document->get_data().duplicate(true);
@@ -2015,7 +2021,7 @@ void NVTimelineEditorWindow::_on_remove_listener_pressed() {
     timeline["listeners"] = listeners;
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
-    if (commit_document_data(data, "全程输入已删除")) {
+    if (commit_document_data(data, utf8("全程输入已删除"))) {
         selected_object_id = current_timeline_id;
         refresh_all();
     }
@@ -2026,7 +2032,7 @@ void NVTimelineEditorWindow::_on_remove_selected_visual_object_pressed() {
     // 结构操作按钮删除，避免误把层级对象当成普通可视元素处理。
     const ObjectLocation location = find_object(selected_object_id);
     if (!location.valid || (location.type != OBJECT_CLIP && location.type != OBJECT_MARK)) {
-        set_status("请先选择一个片段或标签标记");
+        set_status(utf8("请先选择一个片段或标签标记"));
         return;
     }
 
@@ -2044,7 +2050,7 @@ void NVTimelineEditorWindow::_on_remove_selected_visual_object_pressed() {
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
 
-    if (commit_document_data(data, location.type == OBJECT_CLIP ? "视觉片段已删除" : "标签标记已删除")) {
+    if (commit_document_data(data, location.type == OBJECT_CLIP ? utf8("视觉片段已删除") : utf8("标签标记已删除"))) {
         selected_object_id = int(track.get("id", 0));
         refresh_all();
     }
@@ -2073,7 +2079,7 @@ void NVTimelineEditorWindow::_on_apply_properties_pressed() {
         } break;
         case OBJECT_TIMELINE: {
             if (timeline_clock_picker->get_selected() < 0) {
-                set_status("时间轴必须绑定一个有效时钟");
+                set_status(utf8("时间轴必须绑定一个有效时钟"));
                 return;
             }
             updated["clock_id"] = timeline_clock_picker->get_selected_id();
@@ -2130,7 +2136,7 @@ void NVTimelineEditorWindow::_on_apply_properties_pressed() {
         timeline["tracks"] = tracks;
         timelines.set(location.timeline_index, timeline);
         data["timelines"] = timelines;
-        commit_document_data(data, "对象属性已应用");
+        commit_document_data(data, utf8("对象属性已应用"));
         return;
     }
 
@@ -2144,7 +2150,7 @@ void NVTimelineEditorWindow::_on_zoom_changed(double p_value) {
         return;
     }
     zoom = static_cast<float>(p_value);
-    zoom_label->set_text("缩放 " + String::num_real(zoom, 2) + "×");
+    zoom_label->set_text(utf8("缩放 ") + String::num_real(zoom, 2) + utf8("×"));
     refresh_canvas();
 }
 
@@ -2211,7 +2217,7 @@ void NVTimelineEditorWindow::_on_canvas_object_moved(int p_object_id, int p_star
     timelines.set(location.timeline_index, timeline);
     data["timelines"] = timelines;
     selected_object_id = p_object_id;
-    commit_document_data(data, location.type == OBJECT_CLIP ? "片段位置已更新" : "标签标记位置已更新");
+    commit_document_data(data, location.type == OBJECT_CLIP ? utf8("片段位置已更新") : utf8("标签标记位置已更新"));
 }
 
 void NVTimelineEditorWindow::_on_canvas_playhead_changed(int p_units) {
@@ -2221,7 +2227,7 @@ void NVTimelineEditorWindow::_on_canvas_playhead_changed(int p_units) {
         playhead_units = std::min(playhead_units, int(location.object["duration"]));
     }
     refresh_canvas();
-    set_status("时间位置已定位");
+    set_status(utf8("时间位置已定位"));
 }
 
 } // namespace godot

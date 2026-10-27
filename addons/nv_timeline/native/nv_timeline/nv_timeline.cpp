@@ -19,6 +19,12 @@ String operator+(const String &p_left, const char *p_right) {
 
 namespace {
 
+// 普通 char* 在 godot-cpp 中按 Latin-1 解码；诊断信息和协议默认文本来自
+// UTF-8 源码文件，必须显式转换，才能在 Godot 控件和日志中正确显示。
+String utf8(const char *p_text) {
+    return String::utf8(p_text);
+}
+
 // 所有 JSON 字段检查都通过这个小工具完成，避免某个对象漏掉字段白名单。
 bool has_only_keys(const Dictionary &p_object, const std::vector<String> &p_allowed,
         const String &p_path, PackedStringArray &r_errors) {
@@ -33,7 +39,7 @@ bool has_only_keys(const Dictionary &p_object, const std::vector<String> &p_allo
             }
         }
         if (!known) {
-            r_errors.push_back(p_path + "." + key + "：不支持的字段");
+            r_errors.push_back(p_path + "." + key + utf8("：不支持的字段"));
         }
     }
     return r_errors.is_empty();
@@ -42,7 +48,7 @@ bool has_only_keys(const Dictionary &p_object, const std::vector<String> &p_allo
 bool require_field(const Dictionary &p_object, const String &p_key, Variant::Type p_type,
         const String &p_path, PackedStringArray &r_errors, bool p_allow_null = false) {
     if (!p_object.has(p_key)) {
-        r_errors.push_back(p_path + "：缺少字段 " + p_key);
+        r_errors.push_back(p_path + utf8("：缺少字段 ") + p_key);
         return false;
     }
     const Variant value = p_object[p_key];
@@ -50,7 +56,7 @@ bool require_field(const Dictionary &p_object, const String &p_key, Variant::Typ
         return true;
     }
     if (value.get_type() != p_type) {
-        r_errors.push_back(p_path + "." + p_key + "：类型不正确");
+        r_errors.push_back(p_path + "." + p_key + utf8("：类型不正确"));
         return false;
     }
     return true;
@@ -66,7 +72,7 @@ bool optional_type(const Dictionary &p_object, const String &p_key, Variant::Typ
         return true;
     }
     if (value.get_type() != p_type) {
-        r_errors.push_back(p_path + "." + p_key + "：类型不正确");
+        r_errors.push_back(p_path + "." + p_key + utf8("：类型不正确"));
         return false;
     }
     return true;
@@ -97,11 +103,11 @@ bool is_hex_color(const String &p_value) {
 void add_id_if_unique(int p_id, const String &p_path, std::vector<int> &r_ids,
         PackedStringArray &r_errors) {
     if (!is_positive_int(p_id)) {
-        r_errors.push_back(p_path + ".id：必须是正的 32 位整数");
+        r_errors.push_back(p_path + utf8(".id：必须是正的 32 位整数"));
         return;
     }
     if (std::find(r_ids.begin(), r_ids.end(), p_id) != r_ids.end()) {
-        r_errors.push_back(p_path + ".id：与文档中已有对象重复");
+        r_errors.push_back(p_path + utf8(".id：与文档中已有对象重复"));
         return;
     }
     r_ids.push_back(p_id);
@@ -204,7 +210,7 @@ NVTimelineDocument::NVTimelineDocument() {
 
 void NVTimelineDocument::_bind_methods() {
     ClassDB::bind_method(D_METHOD("create_empty", "name"), &NVTimelineDocument::create_empty,
-            DEFVAL("新时间轴文档"));
+            DEFVAL(utf8("新时间轴文档")));
     ClassDB::bind_method(D_METHOD("load_text", "text"), &NVTimelineDocument::load_text);
     ClassDB::bind_method(D_METHOD("load_file", "path"), &NVTimelineDocument::load_file);
     ClassDB::bind_method(D_METHOD("save_file", "path", "pretty"), &NVTimelineDocument::save_file,
@@ -232,14 +238,14 @@ bool NVTimelineDocument::load_text(const String &p_text) {
     const Error parse_error = parser->parse(p_text, false);
     if (parse_error != OK) {
         validation_errors.clear();
-        validation_errors.push_back("JSON 语法错误（第 " + String::num_int64(parser->get_error_line()) +
-                " 行）：" + parser->get_error_message());
+        validation_errors.push_back(utf8("JSON 语法错误（第 ") + String::num_int64(parser->get_error_line()) +
+                utf8(" 行）：") + parser->get_error_message());
         return false;
     }
     const Variant parsed = parser->get_data();
     if (parsed.get_type() != Variant::DICTIONARY) {
         validation_errors.clear();
-        validation_errors.push_back("JSON 根节点必须是对象");
+        validation_errors.push_back(utf8("JSON 根节点必须是对象"));
         return false;
     }
     return set_data(Dictionary(parsed));
@@ -248,7 +254,7 @@ bool NVTimelineDocument::load_text(const String &p_text) {
 bool NVTimelineDocument::load_file(const String &p_path) {
     if (!FileAccess::file_exists(p_path)) {
         validation_errors.clear();
-        validation_errors.push_back("找不到时间轴文件：" + p_path);
+        validation_errors.push_back(utf8("找不到时间轴文件：") + p_path);
         return false;
     }
     return load_text(FileAccess::get_file_as_string(p_path));
@@ -281,7 +287,7 @@ bool NVTimelineDocument::set_data(const Dictionary &p_data) {
 int NVTimelineDocument::allocate_id() {
     if (!is_valid() || !data.has("id_counter") || data["id_counter"].get_type() != Variant::INT) {
         validation_errors.clear();
-        validation_errors.push_back("无法分配 ID：当前文档无效");
+        validation_errors.push_back(utf8("无法分配 ID：当前文档无效"));
         return 0;
     }
     const int64_t current = int64_t(data["id_counter"]);
@@ -289,7 +295,7 @@ int NVTimelineDocument::allocate_id() {
     // 溢出属于未定义行为，同时保留与 C# unchecked 递增相同的拒绝语义。
     if (current < 0 || current >= std::numeric_limits<int32_t>::max()) {
         validation_errors.clear();
-        validation_errors.push_back("无法分配 ID：id_counter 已达到 32 位整数上限");
+        validation_errors.push_back(utf8("无法分配 ID：id_counter 已达到 32 位整数上限"));
         return 0;
     }
     const int next = static_cast<int>(current + 1);
@@ -307,7 +313,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
     optional_type(p_data, "name", Variant::STRING, "root", validation_errors);
     if (p_data.has("id_counter") && p_data["id_counter"].get_type() == Variant::INT &&
             (int64_t(p_data["id_counter"]) < 0 || int64_t(p_data["id_counter"]) > std::numeric_limits<int32_t>::max())) {
-        validation_errors.push_back("root.id_counter：必须是非负的 32 位整数");
+        validation_errors.push_back(utf8("root.id_counter：必须是非负的 32 位整数"));
     }
 
     std::vector<int> clock_ids;
@@ -316,7 +322,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
         for (int64_t i = 0; i < clocks_array.size(); ++i) {
             const String path = "root.clocks[" + String::num_int64(i) + "]";
             if (clocks_array[i].get_type() != Variant::DICTIONARY) {
-                validation_errors.push_back(path + "：必须是对象");
+                validation_errors.push_back(path + utf8("：必须是对象"));
                 continue;
             }
             const Dictionary clock = clocks_array[i];
@@ -326,13 +332,13 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
             optional_type(clock, "name", Variant::STRING, path, validation_errors);
             if (clock.has("rate") && clock["rate"].get_type() != Variant::FLOAT &&
                     clock["rate"].get_type() != Variant::INT) {
-                validation_errors.push_back(path + ".rate：必须是 number 类型");
+                validation_errors.push_back(path + utf8(".rate：必须是 number 类型"));
             }
             if (clock.has("id") && clock["id"].get_type() == Variant::INT) {
                 const int clock_id = int(clock["id"]);
                 add_id_if_unique(clock_id, path, ids, validation_errors);
                 if (std::find(clock_ids.begin(), clock_ids.end(), clock_id) != clock_ids.end()) {
-                    validation_errors.push_back(path + ".id：时钟 ID 重复");
+                    validation_errors.push_back(path + utf8(".id：时钟 ID 重复"));
                 } else if (is_positive_int(clock_id)) {
                     clock_ids.push_back(clock_id);
                 }
@@ -340,12 +346,12 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
             if (clock.has("mode") && clock["mode"].get_type() == Variant::STRING) {
                 const String mode = clock["mode"];
                 if (mode != "manual" && mode != "realtime") {
-                    validation_errors.push_back(path + ".mode：只能是 manual 或 realtime");
+                    validation_errors.push_back(path + utf8(".mode：只能是 manual 或 realtime"));
                 }
                 if (mode == "realtime" && (!clock.has("rate") ||
                         (clock["rate"].get_type() != Variant::FLOAT && clock["rate"].get_type() != Variant::INT) ||
                         double(clock["rate"]) <= 0.0)) {
-                    validation_errors.push_back(path + ".rate：realtime 时必须是大于 0 的数");
+                    validation_errors.push_back(path + utf8(".rate：realtime 时必须是大于 0 的数"));
                 }
             }
         }
@@ -356,7 +362,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
         for (int64_t i = 0; i < timelines_array.size(); ++i) {
             const String path = "root.timelines[" + String::num_int64(i) + "]";
             if (timelines_array[i].get_type() != Variant::DICTIONARY) {
-                validation_errors.push_back(path + "：必须是对象");
+                validation_errors.push_back(path + utf8("：必须是对象"));
                 continue;
             }
             const Dictionary timeline = timelines_array[i];
@@ -372,13 +378,13 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
             }
             if (timeline.has("clock_id") && timeline["clock_id"].get_type() == Variant::INT &&
                     std::find(clock_ids.begin(), clock_ids.end(), int(timeline["clock_id"])) == clock_ids.end()) {
-                validation_errors.push_back(path + ".clock_id：没有引用到已定义的时钟");
+                validation_errors.push_back(path + utf8(".clock_id：没有引用到已定义的时钟"));
             }
             int timeline_duration = -1;
             if (timeline.has("duration") && timeline["duration"].get_type() == Variant::INT) {
                 timeline_duration = int(timeline["duration"]);
                 if (!is_positive_int(timeline_duration)) {
-                    validation_errors.push_back(path + ".duration：有限时长必须是正整数");
+                    validation_errors.push_back(path + utf8(".duration：有限时长必须是正整数"));
                 }
             }
 
@@ -387,7 +393,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                 for (int64_t t = 0; t < tracks.size(); ++t) {
                     const String track_path = path + ".tracks[" + String::num_int64(t) + "]";
                     if (tracks[t].get_type() != Variant::DICTIONARY) {
-                        validation_errors.push_back(track_path + "：必须是对象");
+                        validation_errors.push_back(track_path + utf8("：必须是对象"));
                         continue;
                     }
                     const Dictionary track = tracks[t];
@@ -405,7 +411,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                         for (int64_t c = 0; c < clips.size(); ++c) {
                             const String clip_path = track_path + ".clips[" + String::num_int64(c) + "]";
                             if (clips[c].get_type() != Variant::DICTIONARY) {
-                                validation_errors.push_back(clip_path + "：必须是对象");
+                                validation_errors.push_back(clip_path + utf8("：必须是对象"));
                                 continue;
                             }
                             const Dictionary clip = clips[c];
@@ -420,22 +426,22 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                             }
                             if (clip.has("name") && clip["name"].get_type() == Variant::STRING &&
                                     String(clip["name"]).strip_edges().is_empty()) {
-                                validation_errors.push_back(clip_path + ".name：不能为空");
+                                validation_errors.push_back(clip_path + utf8(".name：不能为空"));
                             }
                             if (clip.has("start") && clip.has("duration") &&
                                     clip["start"].get_type() == Variant::INT && clip["duration"].get_type() == Variant::INT) {
                                 const int64_t start = int64_t(clip["start"]);
                                 const int64_t clip_duration = int64_t(clip["duration"]);
                                 if (start < 0 || clip_duration <= 0) {
-                                    validation_errors.push_back(clip_path + "：start 必须非负，duration 必须为正");
+                                    validation_errors.push_back(clip_path + utf8("：start 必须非负，duration 必须为正"));
                                 }
                                 if (timeline_duration > 0 && start + clip_duration > timeline_duration) {
-                                    validation_errors.push_back(clip_path + "：片段末端超过时间轴 duration");
+                                    validation_errors.push_back(clip_path + utf8("：片段末端超过时间轴 duration"));
                                 }
                             }
                             if (clip.has("color") && clip["color"].get_type() == Variant::STRING &&
                                     !is_hex_color(String(clip["color"]))) {
-                                validation_errors.push_back(clip_path + ".color：必须是 #RRGGBB");
+                                validation_errors.push_back(clip_path + utf8(".color：必须是 #RRGGBB"));
                             }
                         }
                     }
@@ -444,7 +450,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                         for (int64_t m = 0; m < marks.size(); ++m) {
                             const String mark_path = track_path + ".marks[" + String::num_int64(m) + "]";
                             if (marks[m].get_type() != Variant::DICTIONARY) {
-                                validation_errors.push_back(mark_path + "：必须是对象");
+                                validation_errors.push_back(mark_path + utf8("：必须是对象"));
                                 continue;
                             }
                             const Dictionary mark = marks[m];
@@ -460,17 +466,17 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                             if (mark.has("time") && mark["time"].get_type() == Variant::INT) {
                                 const int mark_time = int(mark["time"]);
                                 if (!is_non_negative_int(mark_time) || (timeline_duration > 0 && mark_time > timeline_duration)) {
-                                    validation_errors.push_back(mark_path + ".time：超出有效时间范围");
+                                    validation_errors.push_back(mark_path + utf8(".time：超出有效时间范围"));
                                 }
                             }
                             if (mark.has("kind") && mark["kind"].get_type() == Variant::STRING &&
                                     String(mark["kind"]) != "output" && String(mark["kind"]) != "blocking") {
-                                validation_errors.push_back(mark_path + ".kind：只能是 output 或 blocking");
+                                validation_errors.push_back(mark_path + utf8(".kind：只能是 output 或 blocking"));
                             }
                             if (mark.has("label") && mark["label"].get_type() == Variant::STRING) {
                                 const String label = mark["label"];
                                 if (label.is_empty() || label != label.strip_edges()) {
-                                    validation_errors.push_back(mark_path + ".label：必须是非空且无首尾空白的字符串");
+                                    validation_errors.push_back(mark_path + utf8(".label：必须是非空且无首尾空白的字符串"));
                                 }
                             }
                         }
@@ -483,7 +489,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                 for (int64_t l = 0; l < listeners.size(); ++l) {
                     const String listener_path = path + ".listeners[" + String::num_int64(l) + "]";
                     if (listeners[l].get_type() != Variant::DICTIONARY) {
-                        validation_errors.push_back(listener_path + "：必须是对象");
+                        validation_errors.push_back(listener_path + utf8("：必须是对象"));
                         continue;
                     }
                     const Dictionary listener = listeners[l];
@@ -498,7 +504,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                     if (listener.has("label") && listener["label"].get_type() == Variant::STRING) {
                         const String label = listener["label"];
                         if (label.is_empty() || label != label.strip_edges()) {
-                            validation_errors.push_back(listener_path + ".label：必须是非空且无首尾空白的字符串");
+                            validation_errors.push_back(listener_path + utf8(".label：必须是非空且无首尾空白的字符串"));
                         }
                     }
                 }
@@ -512,7 +518,7 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
             max_id = std::max(max_id, id);
         }
         if (int64_t(p_data["id_counter"]) < max_id) {
-            validation_errors.push_back("root.id_counter：不能小于文档中已存在的最大 ID");
+            validation_errors.push_back(utf8("root.id_counter：不能小于文档中已存在的最大 ID"));
         }
     }
     return validation_errors.is_empty();
@@ -603,7 +609,7 @@ Dictionary NVTimelineEventManager::message_to_dictionary(const QueuedMessage &p_
 int NVTimelineEventManager::register_binding(const String &p_label, const Callable &p_handler,
         bool p_requires_timeline_input) {
     if (p_label.is_empty() || !p_handler.is_valid()) {
-        diagnostics.push_back("拒绝注册标签绑定：标签为空或 Callable 无效");
+        diagnostics.push_back(utf8("拒绝注册标签绑定：标签为空或 Callable 无效"));
         return 0;
     }
     Binding binding;
@@ -637,7 +643,7 @@ void NVTimelineEventManager::set_binding_enabled(int p_binding_id, bool p_enable
 void NVTimelineEventManager::publish_label(const String &p_label, int p_source_timeline_id,
         int p_source_run_id, int p_input_id, int p_time_units) {
     if (p_label.is_empty()) {
-        diagnostics.push_back("忽略空标签消息");
+        diagnostics.push_back(utf8("忽略空标签消息"));
         return;
     }
     QueuedMessage message;
@@ -1034,7 +1040,7 @@ void NVTimelineService::dispatch_messages() {
         ++dispatched;
     }
     if (event_manager->has_pending_messages()) {
-        add_diagnostic("单轮标签派发达到上限，可能存在循环触发；剩余消息将在下一帧继续");
+        add_diagnostic(utf8("单轮标签派发达到上限，可能存在循环触发；剩余消息将在下一帧继续"));
     }
     dispatching_messages = false;
 }
@@ -1098,7 +1104,7 @@ bool NVTimelineService::build_from_document(const Dictionary &p_data) {
         Ref<NVTimelineRuntime> timeline;
         timeline.instantiate();
         if (!timeline->configure(Dictionary(timeline_array[i]), output_callback)) {
-            add_diagnostic("时间轴运行实例构造失败：索引 " + String::num_int64(i));
+            add_diagnostic(utf8("时间轴运行实例构造失败：索引 ") + String::num_int64(i));
             return false;
         }
         timelines.push_back(timeline);
@@ -1170,7 +1176,7 @@ Array NVTimelineService::get_timeline_ids() const {
 bool NVTimelineService::start_timeline(int p_timeline_id) {
     const Ref<NVTimelineRuntime> timeline = find_timeline(p_timeline_id);
     if (timeline.is_null()) {
-        add_diagnostic("启动失败：找不到时间轴 " + String::num_int64(p_timeline_id));
+        add_diagnostic(utf8("启动失败：找不到时间轴 ") + String::num_int64(p_timeline_id));
         return false;
     }
     timeline->start();

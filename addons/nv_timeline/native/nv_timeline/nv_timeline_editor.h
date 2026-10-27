@@ -267,7 +267,7 @@ public:
     /// 将当前已校验文档写入目标文件；路径可以是 res:// 或绝对文件系统路径。
     bool save_document(const String &p_path);
     /// 创建带一个手动时钟和一条空时间轴的新文档。
-    void create_new_document(const String &p_name = "新时间轴文档");
+    void create_new_document(const String &p_name = String::utf8("新时间轴文档"));
     Dictionary get_document_data() const;
     bool is_dirty() const { return dirty; }
     String get_current_path() const { return current_path; }
