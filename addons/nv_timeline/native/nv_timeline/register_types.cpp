@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "nv_timeline.h"
+#include "nv_timeline_editor.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -8,14 +9,17 @@
 using namespace godot;
 
 void initialize_nv_timeline_types(ModuleInitializationLevel p_level) {
-    if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
-        return;
+    if (p_level == MODULE_INITIALIZATION_LEVEL_SCENE) {
+        GDREGISTER_CLASS(NVTimelineDocument);
+        GDREGISTER_CLASS(NVTimelineClock);
+        GDREGISTER_CLASS(NVTimelineEventManager);
+        GDREGISTER_CLASS(NVTimelineRuntime);
+        GDREGISTER_CLASS(NVTimelineService);
+    } else if (p_level == MODULE_INITIALIZATION_LEVEL_EDITOR) {
+        // 原生画布先注册，使编辑器窗口构造时可以安全地 memnew 轨道控件。
+        GDREGISTER_CLASS(NVTimelineCanvas);
+        GDREGISTER_CLASS(NVTimelineEditorWindow);
     }
-    GDREGISTER_CLASS(NVTimelineDocument);
-    GDREGISTER_CLASS(NVTimelineClock);
-    GDREGISTER_CLASS(NVTimelineEventManager);
-    GDREGISTER_CLASS(NVTimelineRuntime);
-    GDREGISTER_CLASS(NVTimelineService);
 }
 
 void uninitialize_nv_timeline_types(ModuleInitializationLevel p_level) {
