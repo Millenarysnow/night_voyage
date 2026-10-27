@@ -2298,7 +2298,9 @@ void NVTimelineEditorWindow::_on_track_header_gui_input(const Ref<InputEvent> &p
         // 右键菜单动作复用现有的新增函数；先选中轨道，确保片段和标记会
         // 写入用户实际右击的轨道，而不是沿用此前的选择对象。
         select_object(context_track_id);
-        const Vector2 mouse_position = get_viewport()->get_mouse_position();
+        // Window 自身继承 Viewport；这里必须读取插件窗口局部坐标。使用
+        // get_viewport() 会退回 Godot 主编辑器视口，导致弹出菜单偏到主窗口。
+        const Vector2 mouse_position = get_mouse_position();
         track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
         get_viewport()->set_input_as_handled();
     }
@@ -2332,7 +2334,9 @@ void NVTimelineEditorWindow::_on_canvas_track_context_requested(int p_track_id) 
     }
     context_track_id = p_track_id;
     select_object(context_track_id);
-    const Vector2 mouse_position = get_viewport()->get_mouse_position();
+    // 画布右键入口与表头入口使用同一套插件窗口局部坐标，保证菜单不会
+    // 因为画布位于滚动容器中而被当成主编辑器坐标。
+    const Vector2 mouse_position = get_mouse_position();
     track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
     get_viewport()->set_input_as_handled();
 }
