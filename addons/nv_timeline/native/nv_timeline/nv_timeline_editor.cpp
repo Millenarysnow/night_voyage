@@ -674,6 +674,11 @@ void NVTimelineEditorWindow::build_ui() {
     body_scroll->set_vertical_scroll_mode(ScrollContainer::SCROLL_MODE_AUTO);
     center_panel->add_child(body_scroll);
     HBoxContainer *timeline_body = memnew(HBoxContainer);
+    // ScrollContainer 不会自动把唯一子节点拉伸到视口大小；若保持默认尺寸标志，
+    // 时间轴主体只会按左侧表头的最小宽度布局，内部时间滚动区会被压缩到 0 像素。
+    // 显式扩展主体后，左侧轨道表头与右侧画布才能共同占满可用区域。
+    timeline_body->set_h_size_flags(Control::SIZE_EXPAND_FILL);
+    timeline_body->set_v_size_flags(Control::SIZE_EXPAND_FILL);
     body_scroll->add_child(timeline_body);
     track_headers = memnew(VBoxContainer);
     track_headers->set_custom_minimum_size(Vector2(188.0f, 0.0f));
