@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/h_box_container.hpp>
 #include <godot_cpp/classes/h_slider.hpp>
+#include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/item_list.hpp>
@@ -706,6 +707,9 @@ NVTimelineEditorWindow::NVTimelineEditorWindow() {
     // 如果只依赖主编辑器的嵌入设置，PopupMenu 会被注册到主编辑器视口，
     // 其局部坐标就会看起来像是跑到了插件窗口外。
     set_embedding_subwindows(true);
+    // 键盘删除使用未处理键事件接入，文本框等子控件先获得机会处理自己的
+    // Backspace/Delete；只有画布选择状态下才会落到这里。
+    set_process_unhandled_key_input(true);
     build_ui();
     configure_dialogs();
     create_new_document();
@@ -1741,6 +1745,36 @@ void NVTimelineEditorWindow::_notification(int p_what) {
     if (p_what == NOTIFICATION_PREDELETE) {
         pending_action = ACTION_NONE;
     }
+}
+
+void NVTimelineEditorWindow::_unhandled_key_input(const Ref<InputEvent> &p_event) {
+    if (!is_visible()) {
+        return;
+    }
+    const Ref<InputEventKey> key_event = p_event;
+    if (key_event.is_null() || !key_event->is_pressed() || key_event->is_echo()) {
+        return;
+    }
+
+    // 同时检查逻辑键码和物理键码，兼容不同键盘布局以及 Godot 对特殊键的
+    // 映射差异；只响应删除按钮对应的两个常用按键。
+    const Key keycode = key_event->get_keycode();
+    const Key physical_keycode = key_event->get_physical_keycode();
+    const bool is_delete_key = keycode == KEY_DELETE || keycode == KEY_BACKSPACE ||
+            physical_keycode == KEY_DELETE || physical_keycode == KEY_BACKSPACE;
+    if (!is_delete_key) {
+        return;
+    }
+
+    const ObjectLocation location = get_selected_object();
+    if (!location.valid || (location.type != OBJECT_CLIP && location.type != OBJECT_MARK)) {
+        return;
+    }
+
+    // 与属性面板“删除片段/删除标记”按钮共用同一条提交路径，保证撤销栈、
+    // JSON 校验、选中对象恢复和状态提示完全一致。
+    _on_remove_selected_visual_object_pressed();
+    get_viewport()->set_input_as_handled();
 }
 
 void NVTimelineEditorWindow::_on_clock_selected(int p_index) {

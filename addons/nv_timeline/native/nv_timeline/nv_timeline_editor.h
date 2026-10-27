@@ -263,6 +263,10 @@ protected:
 public:
     NVTimelineEditorWindow();
 
+    // Godot 的虚函数桥接模板需要公开访问该回调；实际处理仍只响应窗口内
+    // 未被文本控件消费的删除按键。
+    void _unhandled_key_input(const Ref<InputEvent> &p_event) override;
+
     /// 从插件入口调用，显示或聚焦非模态的独立编辑窗口。
     void show_editor();
     /// 打开并严格校验一个 .timeline.json 文件；失败时保留当前文档。
