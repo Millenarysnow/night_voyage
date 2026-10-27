@@ -99,9 +99,9 @@ public:
 /**
  * 统一标签消息管理器。
  *
- * 消息先进入队列，再由 NVTimelineService 在安全的派发轮次中交给时间轴和
- * 程序绑定。Callable 是 Godot/C# 的共同边界，核心不要求业务事件继承某个
- * C++ 类型；绑定的所有权由管理器保存到注销或清空为止。
+ * 请求先进入队列，再由 NVTimelineService 在安全的派发轮次中交给时间轴和
+ * 程序绑定。Callable 是 Godot/C# 的共同边界；管理器只保存绑定关系，不持有
+ * 业务处理实例，也不管理项目回调的异步生命周期。
  */
 class NVTimelineEventManager : public RefCounted {
     GDCLASS(NVTimelineEventManager, RefCounted)
@@ -114,22 +114,14 @@ class NVTimelineEventManager : public RefCounted {
         bool enabled = true;
     };
 
-    struct QueuedMessage {
-        String label;
-        int source_timeline_id = 0;
-        int source_run_id = 0;
-        int input_id = 0;
-        int time_units = 0;
-    };
-
     std::vector<Binding> bindings;
-    std::vector<QueuedMessage> queue;
+    // 统一队列保存完整请求 Dictionary，使标签、控制命令和阻塞结果按同一顺序派发。
+    std::vector<Dictionary> queue;
     int next_binding_id = 1;
     int max_messages_per_round = 1024;
     PackedStringArray diagnostics;
 
     static void _bind_methods();
-    static Dictionary message_to_dictionary(const QueuedMessage &p_message);
 
 public:
     NVTimelineEventManager() = default;
@@ -138,6 +130,8 @@ public:
             bool p_requires_timeline_input = false);
     bool unregister_binding(int p_binding_id);
     void set_binding_enabled(int p_binding_id, bool p_enabled);
+    /// 供 NVTimelineService 内部写入统一 FIFO 队列；脚本业务应使用 Service.submit_request。
+    void enqueue_request(const Dictionary &p_request);
     void publish_label(const String &p_label, int p_source_timeline_id = 0,
             int p_source_run_id = 0, int p_input_id = 0, int p_time_units = 0);
     bool has_pending_messages() const { return !queue.empty(); }
@@ -155,8 +149,8 @@ public:
  * 一条时间轴定义的运行实例。
  *
  * 运行时将启用轨道中的 marks 展平成稳定序列：先按时间，再按轨道数组顺序，
- * 最后按 marks 数组顺序。阻塞标记保持游标不越过，因而一次大步推进不会跳过
- * 后续输出；未消耗的推进量按首版规则丢弃，下一次时钟推进再继续计算。
+ * 最后按 marks 数组顺序。普通推进遇阻时丢弃本次剩余量；显式快进则保留目标，
+ * 等待解除后继续处理到目标。等待结果的业务处理对象不由本类持有。
  */
 class NVTimelineRuntime : public RefCounted {
     GDCLASS(NVTimelineRuntime, RefCounted)
@@ -175,6 +169,7 @@ private:
         int id = 0;
         int time = 0;
         bool blocking = false;
+        bool wait_for_result = false;
         String label;
         int track_order = 0;
         int mark_order = 0;
@@ -191,8 +186,11 @@ private:
     int next_mark_index = 0;
     int waiting_mark_id = 0;
     int run_id = 0;
+    // -1 表示没有等待中的快进目标；阻塞期间保留目标，成功后继续跑到目标位置。
+    int pending_fast_forward_target = -1;
     RuntimeState state = STATE_STOPPED;
     bool pause_requested = false;
+    bool waiting_for_output_result = false;
 
     static void _bind_methods();
     bool has_received(const String &p_label) const;
@@ -211,6 +209,7 @@ public:
     RuntimeState get_state() const { return state; }
     bool is_active() const { return state == STATE_RUNNING || state == STATE_PAUSED || state == STATE_WAITING; }
     bool is_waiting() const { return waiting_mark_id != 0; }
+    bool is_waiting_for_output_result() const { return waiting_for_output_result; }
     int get_waiting_mark_id() const { return waiting_mark_id; }
     Dictionary get_definition() const { return definition; }
     String get_state_name() const;
@@ -223,6 +222,12 @@ public:
     Array receive_label(const String &p_label);
     /// 由绑定时钟调用，返回本次实际向前移动的单位数。
     int advance_units(int p_units);
+    /// 按正常标记顺序快进到绝对时间位置；遇到阻塞时保存目标，解除后继续完成本次快进。
+    bool fast_forward_to(int p_target_units);
+    /// 跳过目标位置之前（含目标时刻）的标记，不发标签、不等待，当前版本只允许向前跳。
+    bool jump_to(int p_target_units);
+    /// 用所属运行 ID 和输出标记 ID 校验异步返回，成功继续，失败停止本次运行。
+    bool resolve_output_result(int p_run_id, int p_mark_id, bool p_success);
 };
 
 /**
@@ -249,7 +254,10 @@ public:
 
 private:
     void dispatch_messages();
-    void on_runtime_output(const String &p_label, int p_timeline_id, int p_run_id, int p_time_units);
+    void dispatch_request(const Dictionary &p_request);
+    void dispatch_label_request(Dictionary p_request);
+    void on_runtime_output(const String &p_label, int p_timeline_id, int p_run_id,
+            int p_time_units, int p_mark_id, bool p_wait_for_result);
     void add_diagnostic(const String &p_message);
     void emit_completed_if_needed(const Ref<NVTimelineRuntime> &p_timeline,
             NVTimelineRuntime::RuntimeState p_before_state);
@@ -281,6 +289,8 @@ public:
     bool stop_timeline(int p_timeline_id);
     /// 手动时钟推进；每条绑定该时钟的时间轴收到同一个推进区间。
     int advance_clock(int p_clock_id, int p_units);
+    /// 统一提交九类公开请求；内部 label 消息不接受外部提交。返回 true 只表示结构有效且已入队。
+    bool submit_request(const Dictionary &p_request);
     /// 外部系统和脚本统一从这里发标签，不直接改写时间轴游标。
     void publish_label(const String &p_label, int p_source_timeline_id = 0,
             int p_source_run_id = 0, int p_input_id = 0, int p_time_units = 0);

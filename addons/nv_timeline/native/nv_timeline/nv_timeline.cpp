@@ -472,12 +472,14 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                                 continue;
                             }
                             const Dictionary mark = marks[m];
-                            has_only_keys(mark, {"id", "name", "time", "kind", "label"}, mark_path, validation_errors);
+                            has_only_keys(mark, {"id", "name", "time", "kind", "label", "wait_for_result"},
+                                    mark_path, validation_errors);
                             require_field(mark, "id", Variant::INT, mark_path, validation_errors);
                             require_field(mark, "time", Variant::INT, mark_path, validation_errors);
                             require_field(mark, "kind", Variant::STRING, mark_path, validation_errors);
                             require_field(mark, "label", Variant::STRING, mark_path, validation_errors);
                             optional_type(mark, "name", Variant::STRING, mark_path, validation_errors);
+                            optional_type(mark, "wait_for_result", Variant::BOOL, mark_path, validation_errors);
                             if (mark.has("id") && mark["id"].get_type() == Variant::INT) {
                                 add_id_if_unique(int(mark["id"]), mark_path, ids, validation_errors);
                             }
@@ -490,6 +492,12 @@ bool NVTimelineDocument::validate_internal(const Dictionary &p_data) {
                             if (mark.has("kind") && mark["kind"].get_type() == Variant::STRING &&
                                     String(mark["kind"]) != "output" && String(mark["kind"]) != "blocking") {
                                 validation_errors.push_back(mark_path + utf8(".kind：只能是 output 或 blocking"));
+                            }
+                            if (mark.has("wait_for_result") && mark["wait_for_result"].get_type() == Variant::BOOL &&
+                                    bool(mark["wait_for_result"]) && mark.has("kind") &&
+                                    mark["kind"].get_type() == Variant::STRING && String(mark["kind"]) != "output") {
+                                validation_errors.push_back(mark_path +
+                                        utf8(".wait_for_result：只有 output 标记可以等待返回结果"));
                             }
                             if (mark.has("label") && mark["label"].get_type() == Variant::STRING) {
                                 const String label = mark["label"];
@@ -601,27 +609,10 @@ void NVTimelineEventManager::_bind_methods() {
             &NVTimelineEventManager::register_binding, DEFVAL(false));
     ClassDB::bind_method(D_METHOD("unregister_binding", "binding_id"), &NVTimelineEventManager::unregister_binding);
     ClassDB::bind_method(D_METHOD("set_binding_enabled", "binding_id", "enabled"), &NVTimelineEventManager::set_binding_enabled);
-    ClassDB::bind_method(D_METHOD("publish_label", "label", "source_timeline_id", "source_run_id", "input_id", "time_units"),
-            &NVTimelineEventManager::publish_label, DEFVAL(0), DEFVAL(0), DEFVAL(0), DEFVAL(0));
-    ClassDB::bind_method(D_METHOD("has_pending_messages"), &NVTimelineEventManager::has_pending_messages);
-    ClassDB::bind_method(D_METHOD("take_next_message"), &NVTimelineEventManager::take_next_message);
-    ClassDB::bind_method(D_METHOD("clear_queue"), &NVTimelineEventManager::clear_queue);
     ClassDB::bind_method(D_METHOD("clear_bindings"), &NVTimelineEventManager::clear_bindings);
     ClassDB::bind_method(D_METHOD("get_max_messages_per_round"), &NVTimelineEventManager::get_max_messages_per_round);
     ClassDB::bind_method(D_METHOD("set_max_messages_per_round", "limit"), &NVTimelineEventManager::set_max_messages_per_round);
     ClassDB::bind_method(D_METHOD("get_diagnostics"), &NVTimelineEventManager::get_diagnostics);
-}
-
-Dictionary NVTimelineEventManager::message_to_dictionary(const QueuedMessage &p_message) {
-    Dictionary result;
-    result["label"] = p_message.label;
-    result["source_timeline_id"] = p_message.source_timeline_id;
-    result["source_run_id"] = p_message.source_run_id;
-    result["input_id"] = p_message.input_id;
-    result["time_units"] = p_message.time_units;
-    result["accepted_timeline_ids"] = Array();
-    result["accepted_input_ids"] = Array();
-    return result;
 }
 
 int NVTimelineEventManager::register_binding(const String &p_label, const Callable &p_handler,
@@ -658,31 +649,44 @@ void NVTimelineEventManager::set_binding_enabled(int p_binding_id, bool p_enable
     }
 }
 
+void NVTimelineEventManager::enqueue_request(const Dictionary &p_request) {
+    const String type = p_request.get("type", String());
+    if (type.is_empty()) {
+        diagnostics.push_back(utf8("拒绝加入统一队列：请求缺少 type"));
+        return;
+    }
+    queue.push_back(p_request.duplicate(true));
+}
+
 void NVTimelineEventManager::publish_label(const String &p_label, int p_source_timeline_id,
         int p_source_run_id, int p_input_id, int p_time_units) {
     if (p_label.is_empty()) {
         diagnostics.push_back(utf8("忽略空标签消息"));
         return;
     }
-    QueuedMessage message;
-    message.label = p_label;
-    message.source_timeline_id = p_source_timeline_id;
-    message.source_run_id = p_source_run_id;
-    message.input_id = p_input_id;
-    message.time_units = p_time_units;
-    queue.push_back(message);
+    Dictionary message;
+    message["type"] = "label";
+    message["label"] = p_label;
+    message["source_timeline_id"] = p_source_timeline_id;
+    message["source_run_id"] = p_source_run_id;
+    message["input_id"] = p_input_id;
+    message["time_units"] = p_time_units;
+    enqueue_request(message);
 }
 
 Dictionary NVTimelineEventManager::take_next_message() {
     if (queue.empty()) {
         return Dictionary();
     }
-    const QueuedMessage message = queue.front();
+    const Dictionary message = queue.front();
     queue.erase(queue.begin());
-    return message_to_dictionary(message);
+    return message;
 }
 
 void NVTimelineEventManager::invoke_bindings(const Dictionary &p_message) {
+    if (String(p_message.get("type", String())) != "label") {
+        return;
+    }
     const String label = p_message.get("label", String());
     const Array accepted = p_message.get("accepted_timeline_ids", Array());
     for (const Binding &binding : bindings) {
@@ -724,6 +728,7 @@ void NVTimelineRuntime::_bind_methods() {
     ClassDB::bind_method(D_METHOD("get_state_name"), &NVTimelineRuntime::get_state_name);
     ClassDB::bind_method(D_METHOD("is_active"), &NVTimelineRuntime::is_active);
     ClassDB::bind_method(D_METHOD("is_waiting"), &NVTimelineRuntime::is_waiting);
+    ClassDB::bind_method(D_METHOD("is_waiting_for_output_result"), &NVTimelineRuntime::is_waiting_for_output_result);
     ClassDB::bind_method(D_METHOD("get_waiting_mark_id"), &NVTimelineRuntime::get_waiting_mark_id);
     ClassDB::bind_method(D_METHOD("get_definition"), &NVTimelineRuntime::get_definition);
     ClassDB::bind_method(D_METHOD("start"), &NVTimelineRuntime::start);
@@ -732,6 +737,10 @@ void NVTimelineRuntime::_bind_methods() {
     ClassDB::bind_method(D_METHOD("stop"), &NVTimelineRuntime::stop);
     ClassDB::bind_method(D_METHOD("receive_label", "label"), &NVTimelineRuntime::receive_label);
     ClassDB::bind_method(D_METHOD("advance_units", "units"), &NVTimelineRuntime::advance_units);
+    ClassDB::bind_method(D_METHOD("fast_forward_to", "target_units"), &NVTimelineRuntime::fast_forward_to);
+    ClassDB::bind_method(D_METHOD("jump_to", "target_units"), &NVTimelineRuntime::jump_to);
+    ClassDB::bind_method(D_METHOD("resolve_output_result", "run_id", "mark_id", "success"),
+            &NVTimelineRuntime::resolve_output_result);
     BIND_ENUM_CONSTANT(STATE_STOPPED);
     BIND_ENUM_CONSTANT(STATE_RUNNING);
     BIND_ENUM_CONSTANT(STATE_PAUSED);
@@ -756,9 +765,11 @@ bool NVTimelineRuntime::configure(const Dictionary &p_definition, const Callable
     received_labels.clear();
     next_mark_index = 0;
     waiting_mark_id = 0;
+    pending_fast_forward_target = -1;
     position_units = 0;
     state = STATE_STOPPED;
     pause_requested = false;
+    waiting_for_output_result = false;
 
     const Array tracks = p_definition.get("tracks", Array());
     for (int64_t track_index = 0; track_index < tracks.size(); ++track_index) {
@@ -779,6 +790,7 @@ bool NVTimelineRuntime::configure(const Dictionary &p_definition, const Callable
             runtime_mark.id = int(mark.get("id", 0));
             runtime_mark.time = int(mark.get("time", 0));
             runtime_mark.blocking = String(mark.get("kind", String())) == "blocking";
+            runtime_mark.wait_for_result = bool(mark.get("wait_for_result", false));
             runtime_mark.label = String(mark.get("label", String()));
             runtime_mark.track_order = int(track_index);
             runtime_mark.mark_order = int(mark_index);
@@ -819,8 +831,10 @@ void NVTimelineRuntime::start() {
     position_units = 0;
     next_mark_index = 0;
     waiting_mark_id = 0;
+    pending_fast_forward_target = -1;
     received_labels.clear();
     pause_requested = false;
+    waiting_for_output_result = false;
     state = STATE_RUNNING;
     evaluate_until(0);
 }
@@ -839,7 +853,7 @@ void NVTimelineRuntime::resume() {
     pause_requested = false;
     state = waiting_mark_id != 0 ? STATE_WAITING : STATE_RUNNING;
     if (state == STATE_RUNNING) {
-        evaluate_until(position_units);
+        evaluate_until(pending_fast_forward_target >= 0 ? pending_fast_forward_target : position_units);
     }
 }
 
@@ -848,8 +862,10 @@ void NVTimelineRuntime::stop() {
     position_units = 0;
     next_mark_index = 0;
     waiting_mark_id = 0;
+    pending_fast_forward_target = -1;
     received_labels.clear();
     pause_requested = false;
+    waiting_for_output_result = false;
 }
 
 Array NVTimelineRuntime::receive_label(const String &p_label) {
@@ -914,7 +930,7 @@ Array NVTimelineRuntime::receive_label(const String &p_label) {
     if (waiting_mark_id == 0 && state == STATE_WAITING) {
         state = pause_requested ? STATE_PAUSED : STATE_RUNNING;
         if (state == STATE_RUNNING) {
-            evaluate_until(position_units);
+            evaluate_until(pending_fast_forward_target >= 0 ? pending_fast_forward_target : position_units);
         }
     }
     return accepted_input_ids;
@@ -930,6 +946,72 @@ int NVTimelineRuntime::advance_units(int p_units) {
     return position_units - old_position;
 }
 
+bool NVTimelineRuntime::fast_forward_to(int p_target_units) {
+    if (p_target_units < position_units) {
+        return false;
+    }
+    const int target = duration > 0 ? std::min(p_target_units, duration) : p_target_units;
+
+    // 已经由普通时钟推进停在阻塞点时，仍允许程序提出快进目标。此时只记录
+    // 目标，不越过当前阻塞；输入或输出结果解除等待后会继续按序求值到该位置。
+    if ((state == STATE_WAITING || state == STATE_PAUSED) && waiting_mark_id != 0) {
+        pending_fast_forward_target = target;
+        return true;
+    }
+    if (state != STATE_RUNNING || waiting_mark_id != 0) {
+        return false;
+    }
+    pending_fast_forward_target = target;
+    evaluate_until(target);
+    return true;
+}
+
+bool NVTimelineRuntime::jump_to(int p_target_units) {
+    if (p_target_units < position_units || !is_active()) {
+        return false;
+    }
+    const int target = duration > 0 ? std::min(p_target_units, duration) : p_target_units;
+    position_units = target;
+    waiting_mark_id = 0;
+    waiting_for_output_result = false;
+    pending_fast_forward_target = -1;
+
+    // 直接跳转会略过目标时刻及之前的标记；之后正常推进时只会触发更晚的标记。
+    next_mark_index = 0;
+    while (next_mark_index < static_cast<int>(marks.size()) && marks[next_mark_index].time <= target) {
+        ++next_mark_index;
+    }
+
+    if (duration > 0 && target >= duration) {
+        state = STATE_COMPLETED;
+    } else {
+        state = pause_requested ? STATE_PAUSED : STATE_RUNNING;
+    }
+    return true;
+}
+
+bool NVTimelineRuntime::resolve_output_result(int p_run_id, int p_mark_id, bool p_success) {
+    if (!waiting_for_output_result || p_run_id != run_id || p_mark_id != waiting_mark_id ||
+            (state != STATE_WAITING && state != STATE_PAUSED)) {
+        return false;
+    }
+    if (!p_success) {
+        stop();
+        return true;
+    }
+
+    waiting_for_output_result = false;
+    waiting_mark_id = 0;
+    ++next_mark_index;
+    if (pause_requested) {
+        state = STATE_PAUSED;
+        return true;
+    }
+    state = STATE_RUNNING;
+    evaluate_until(pending_fast_forward_target >= 0 ? pending_fast_forward_target : position_units);
+    return true;
+}
+
 void NVTimelineRuntime::evaluate_until(int p_target_units) {
     if (state != STATE_RUNNING || waiting_mark_id != 0) {
         return;
@@ -942,16 +1024,29 @@ void NVTimelineRuntime::evaluate_until(int p_target_units) {
         if (mark.blocking && !has_received(mark.label)) {
             position_units = mark.time;
             waiting_mark_id = mark.id;
+            waiting_for_output_result = false;
             state = STATE_WAITING;
             return;
         }
         position_units = std::max(position_units, mark.time);
+        if (!mark.blocking && mark.wait_for_result) {
+            waiting_mark_id = mark.id;
+            waiting_for_output_result = true;
+            state = STATE_WAITING;
+            if (output_callback.is_valid()) {
+                output_callback.call(mark.label, id, run_id, mark.time, mark.id, true);
+            }
+            return;
+        }
         ++next_mark_index;
         if (!mark.blocking && output_callback.is_valid()) {
-            output_callback.call(mark.label, id, run_id, mark.time);
+            output_callback.call(mark.label, id, run_id, mark.time, mark.id, false);
         }
     }
     position_units = std::max(position_units, p_target_units);
+    if (pending_fast_forward_target >= 0 && position_units >= pending_fast_forward_target) {
+        pending_fast_forward_target = -1;
+    }
     if (duration > 0 && position_units >= duration && next_mark_index >= static_cast<int>(marks.size())) {
         state = STATE_COMPLETED;
     }
@@ -971,7 +1066,8 @@ NVTimelineService::NVTimelineService() {
 void NVTimelineService::_bind_methods() {
     // 运行实例通过 Callable 回调到 Service；即使该方法主要供 C++ 内部使用，
     // 也必须登记到 ClassDB，Godot 才能从 Callable 正确解析方法名。
-    ClassDB::bind_method(D_METHOD("_on_runtime_output", "label", "timeline_id", "run_id", "time_units"),
+    ClassDB::bind_method(D_METHOD("_on_runtime_output", "label", "timeline_id", "run_id", "time_units",
+            "mark_id", "wait_for_result"),
             &NVTimelineService::on_runtime_output);
     ClassDB::bind_method(D_METHOD("load_document", "data"), &NVTimelineService::load_document);
     ClassDB::bind_method(D_METHOD("load_json_file", "path"), &NVTimelineService::load_json_file);
@@ -991,11 +1087,14 @@ void NVTimelineService::_bind_methods() {
     ClassDB::bind_method(D_METHOD("resume_timeline", "timeline_id"), &NVTimelineService::resume_timeline);
     ClassDB::bind_method(D_METHOD("stop_timeline", "timeline_id"), &NVTimelineService::stop_timeline);
     ClassDB::bind_method(D_METHOD("advance_clock", "clock_id", "units"), &NVTimelineService::advance_clock);
+    ClassDB::bind_method(D_METHOD("submit_request", "request"), &NVTimelineService::submit_request);
     ClassDB::bind_method(D_METHOD("publish_label", "label", "source_timeline_id", "source_run_id", "input_id", "time_units"),
             &NVTimelineService::publish_label, DEFVAL(0), DEFVAL(0), DEFVAL(0), DEFVAL(0));
     ADD_SIGNAL(MethodInfo("timeline_started", PropertyInfo(Variant::INT, "timeline_id"),
             PropertyInfo(Variant::INT, "run_id")));
     ADD_SIGNAL(MethodInfo("timeline_paused", PropertyInfo(Variant::INT, "timeline_id")));
+    ADD_SIGNAL(MethodInfo("timeline_stopped", PropertyInfo(Variant::INT, "timeline_id"),
+            PropertyInfo(Variant::INT, "run_id")));
     ADD_SIGNAL(MethodInfo("timeline_completed", PropertyInfo(Variant::INT, "timeline_id"),
             PropertyInfo(Variant::INT, "run_id")));
     ADD_SIGNAL(MethodInfo("label_emitted", PropertyInfo(Variant::STRING, "label"),
@@ -1024,8 +1123,8 @@ void NVTimelineService::_process(double p_delta) {
 }
 
 void NVTimelineService::dispatch_messages() {
-    // Callable 回调可能再次发布标签；只追加到当前队列尾部，待当前轮次继续，
-    // 不能从回调内部递归进入派发函数，否则两个绑定互相发布时会耗尽调用栈。
+    // 标签、控制请求和处理结果共用 FIFO；回调新增的请求只排到队尾，
+    // 当前请求完成后再执行，避免回调中途改写本次正在遍历的运行状态。
     if (dispatching_messages) {
         return;
     }
@@ -1033,39 +1132,144 @@ void NVTimelineService::dispatch_messages() {
     int dispatched = 0;
     const int limit = event_manager->get_max_messages_per_round();
     while (event_manager->has_pending_messages() && dispatched < limit) {
-        Dictionary message = event_manager->take_next_message();
-        const String label = message.get("label", String());
-        Array accepted_timeline_ids;
-        Array accepted_input_ids;
-        for (const Ref<NVTimelineRuntime> &timeline : timelines) {
-            if (timeline.is_null() || !timeline->is_active()) {
-                continue;
-            }
-            const NVTimelineRuntime::RuntimeState before_state = timeline->get_state();
-            const Array accepted = timeline->receive_label(label);
-            emit_completed_if_needed(timeline, before_state);
-            if (accepted.is_empty()) {
-                continue;
-            }
-            accepted_timeline_ids.push_back(timeline->get_id());
-            for (int64_t i = 0; i < accepted.size(); ++i) {
-                accepted_input_ids.push_back(accepted[i]);
-            }
-        }
-        message["accepted_timeline_ids"] = accepted_timeline_ids;
-        message["accepted_input_ids"] = accepted_input_ids;
-        event_manager->invoke_bindings(message);
+        const Dictionary request = event_manager->take_next_message();
+        dispatch_request(request);
         ++dispatched;
     }
     if (event_manager->has_pending_messages()) {
-        add_diagnostic(utf8("单轮标签派发达到上限，可能存在循环触发；剩余消息将在下一帧继续"));
+        add_diagnostic(utf8("单轮时间轴请求派发达到上限，可能存在循环触发；剩余请求将在下一帧继续"));
     }
     dispatching_messages = false;
 }
 
+void NVTimelineService::dispatch_request(const Dictionary &p_request) {
+    const String type = p_request.get("type", String());
+    // label 是运行时输出回调写入队列的内部消息类型；publish_label 才是
+    // 对项目脚本公开的提交类型。两者在这里统一路由到标签分发逻辑。
+    if (type == "label" || type == "publish_label") {
+        dispatch_label_request(p_request);
+        return;
+    }
+    if (type == "start_timeline") {
+        start_timeline(int(p_request.get("timeline_id", 0)));
+        return;
+    }
+    if (type == "pause_timeline") {
+        pause_timeline(int(p_request.get("timeline_id", 0)));
+        return;
+    }
+    if (type == "resume_timeline") {
+        resume_timeline(int(p_request.get("timeline_id", 0)));
+        return;
+    }
+    if (type == "stop_timeline") {
+        stop_timeline(int(p_request.get("timeline_id", 0)));
+        return;
+    }
+    if (type == "advance_clock") {
+        advance_clock(int(p_request.get("clock_id", 0)), int(p_request.get("units", 0)));
+        return;
+    }
+    if (type == "fast_forward") {
+        const int timeline_id = int(p_request.get("timeline_id", 0));
+        const Ref<NVTimelineRuntime> timeline = find_timeline(timeline_id);
+        if (timeline.is_null()) {
+            add_diagnostic(utf8("快进失败：找不到时间轴 ") + String::num_int64(timeline_id));
+            return;
+        }
+        const NVTimelineRuntime::RuntimeState before_state = timeline->get_state();
+        if (!timeline->fast_forward_to(int(p_request.get("target_units", 0)))) {
+            add_diagnostic(utf8("快进失败：当前时间轴状态不允许快进，或目标位置早于当前位置"));
+            return;
+        }
+        emit_completed_if_needed(timeline, before_state);
+        return;
+    }
+    if (type == "jump") {
+        const int timeline_id = int(p_request.get("timeline_id", 0));
+        const Ref<NVTimelineRuntime> timeline = find_timeline(timeline_id);
+        if (timeline.is_null()) {
+            add_diagnostic(utf8("跳转失败：找不到时间轴 ") + String::num_int64(timeline_id));
+            return;
+        }
+        const NVTimelineRuntime::RuntimeState before_state = timeline->get_state();
+        if (!timeline->jump_to(int(p_request.get("target_units", 0)))) {
+            add_diagnostic(utf8("跳转失败：时间轴不处于活动状态，或目标位置早于当前位置"));
+            return;
+        }
+        emit_completed_if_needed(timeline, before_state);
+        return;
+    }
+    if (type == "resolve_output_result") {
+        const int timeline_id = int(p_request.get("timeline_id", 0));
+        const Ref<NVTimelineRuntime> timeline = find_timeline(timeline_id);
+        if (timeline.is_null()) {
+            add_diagnostic(utf8("输出结果无效：找不到时间轴 ") + String::num_int64(timeline_id));
+            return;
+        }
+        const NVTimelineRuntime::RuntimeState before_state = timeline->get_state();
+        if (!timeline->resolve_output_result(int(p_request.get("run_id", 0)),
+                int(p_request.get("mark_id", 0)), bool(p_request.get("success", false)))) {
+            add_diagnostic(utf8("忽略过期或不匹配的阻塞输出结果"));
+            return;
+        }
+        if (!bool(p_request.get("success", false))) {
+            emit_signal("timeline_stopped", timeline_id, timeline->get_run_id());
+        }
+        emit_completed_if_needed(timeline, before_state);
+        return;
+    }
+    add_diagnostic(utf8("忽略未知时间轴请求类型：") + type);
+}
+
+void NVTimelineService::dispatch_label_request(Dictionary p_request) {
+    const String label = p_request.get("label", String());
+    const int target_timeline_id = int(p_request.get("target_timeline_id", 0));
+    if (label.is_empty()) {
+        add_diagnostic(utf8("忽略空标签消息"));
+        return;
+    }
+    if (target_timeline_id != 0 && find_timeline(target_timeline_id).is_null()) {
+        add_diagnostic(utf8("标签目标不存在：") + String::num_int64(target_timeline_id));
+        return;
+    }
+    Array accepted_timeline_ids;
+    Array accepted_input_ids;
+    for (const Ref<NVTimelineRuntime> &timeline : timelines) {
+        if (timeline.is_null() || !timeline->is_active() ||
+                (target_timeline_id != 0 && timeline->get_id() != target_timeline_id)) {
+            continue;
+        }
+        const NVTimelineRuntime::RuntimeState before_state = timeline->get_state();
+        const Array accepted = timeline->receive_label(label);
+        emit_completed_if_needed(timeline, before_state);
+        if (accepted.is_empty()) {
+            continue;
+        }
+        accepted_timeline_ids.push_back(timeline->get_id());
+        for (int64_t i = 0; i < accepted.size(); ++i) {
+            accepted_input_ids.push_back(accepted[i]);
+        }
+    }
+    p_request["accepted_timeline_ids"] = accepted_timeline_ids;
+    p_request["accepted_input_ids"] = accepted_input_ids;
+    // 两种公开标签请求名称在此归一为同一种回调消息类型，保持 Callable 上下文稳定。
+    p_request["type"] = "label";
+    event_manager->invoke_bindings(p_request);
+}
+
 void NVTimelineService::on_runtime_output(const String &p_label, int p_timeline_id,
-        int p_run_id, int p_time_units) {
-    event_manager->publish_label(p_label, p_timeline_id, p_run_id, 0, p_time_units);
+        int p_run_id, int p_time_units, int p_mark_id, bool p_wait_for_result) {
+    Dictionary request;
+    request["type"] = "label";
+    request["label"] = p_label;
+    request["source_timeline_id"] = p_timeline_id;
+    request["source_run_id"] = p_run_id;
+    request["input_id"] = 0;
+    request["time_units"] = p_time_units;
+    request["output_mark_id"] = p_mark_id;
+    request["wait_for_result"] = p_wait_for_result;
+    event_manager->enqueue_request(request);
     emit_signal("label_emitted", p_label, p_timeline_id, p_time_units);
 }
 
@@ -1226,7 +1430,9 @@ bool NVTimelineService::stop_timeline(int p_timeline_id) {
     if (timeline.is_null()) {
         return false;
     }
+    const int run_id = timeline->get_run_id();
     timeline->stop();
+    emit_signal("timeline_stopped", p_timeline_id, run_id);
     return true;
 }
 
@@ -1249,8 +1455,79 @@ int NVTimelineService::advance_clock(int p_clock_id, int p_units) {
 
 void NVTimelineService::publish_label(const String &p_label, int p_source_timeline_id,
         int p_source_run_id, int p_input_id, int p_time_units) {
-    event_manager->publish_label(p_label, p_source_timeline_id, p_source_run_id, p_input_id, p_time_units);
+    Dictionary request;
+    request["type"] = "publish_label";
+    request["label"] = p_label;
+    request["source_timeline_id"] = p_source_timeline_id;
+    request["source_run_id"] = p_source_run_id;
+    request["input_id"] = p_input_id;
+    request["time_units"] = p_time_units;
+    submit_request(request);
+}
+
+bool NVTimelineService::submit_request(const Dictionary &p_request) {
+    const String type = p_request.get("type", String());
+    if (type.is_empty()) {
+        add_diagnostic(utf8("拒绝提交时间轴请求：缺少字符串字段 type"));
+        return false;
+    }
+
+    // 统一入口只验证请求的结构和基本取值；目标是否存在由派发时检查，
+    // 这样回调在队列中追加后续请求时仍遵守同一套诊断和执行规则。
+    const auto has_integer = [&p_request](const String &p_key) {
+        return p_request.has(p_key) && p_request[p_key].get_type() == Variant::INT;
+    };
+    if (type == "publish_label") {
+        if (!p_request.has("label") || p_request["label"].get_type() != Variant::STRING ||
+                String(p_request["label"]).is_empty()) {
+            add_diagnostic(utf8("拒绝提交标签请求：label 必须是非空字符串"));
+            return false;
+        }
+        for (const String &key : {String("target_timeline_id"), String("source_timeline_id"),
+                String("source_run_id"), String("input_id"), String("time_units"), String("output_mark_id")}) {
+            if (p_request.has(key) && !has_integer(key)) {
+                add_diagnostic(utf8("拒绝提交标签请求：字段必须为整数：") + key);
+                return false;
+            }
+        }
+        if (p_request.has("wait_for_result") && p_request["wait_for_result"].get_type() != Variant::BOOL) {
+            add_diagnostic(utf8("拒绝提交标签请求：wait_for_result 必须为布尔值"));
+            return false;
+        }
+    } else if (type == "start_timeline" || type == "pause_timeline" ||
+            type == "resume_timeline" || type == "stop_timeline") {
+        if (!has_integer("timeline_id") || int(p_request["timeline_id"]) <= 0) {
+            add_diagnostic(utf8("拒绝提交时间轴控制请求：timeline_id 必须是正整数"));
+            return false;
+        }
+    } else if (type == "advance_clock") {
+        if (!has_integer("clock_id") || int(p_request["clock_id"]) <= 0 ||
+                !has_integer("units") || int(p_request["units"]) <= 0) {
+            add_diagnostic(utf8("拒绝提交时钟推进请求：clock_id 和 units 必须是正整数"));
+            return false;
+        }
+    } else if (type == "fast_forward" || type == "jump") {
+        if (!has_integer("timeline_id") || int(p_request["timeline_id"]) <= 0 ||
+                !has_integer("target_units") || int(p_request["target_units"]) < 0) {
+            add_diagnostic(utf8("拒绝提交时间位置请求：timeline_id 必须为正整数，target_units 不能为负"));
+            return false;
+        }
+    } else if (type == "resolve_output_result") {
+        if (!has_integer("timeline_id") || int(p_request["timeline_id"]) <= 0 ||
+                !has_integer("run_id") || int(p_request["run_id"]) <= 0 ||
+                !has_integer("mark_id") || int(p_request["mark_id"]) <= 0 ||
+                !p_request.has("success") || p_request["success"].get_type() != Variant::BOOL) {
+            add_diagnostic(utf8("拒绝提交输出结果：需要 timeline_id、run_id、mark_id 和布尔值 success"));
+            return false;
+        }
+    } else {
+        add_diagnostic(utf8("拒绝提交未知时间轴请求类型：") + type);
+        return false;
+    }
+
+    event_manager->enqueue_request(p_request);
     dispatch_messages();
+    return true;
 }
 
 } // namespace godot

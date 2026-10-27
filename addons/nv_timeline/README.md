@@ -1,12 +1,12 @@
 # NV Timeline
 
-`NVTimelineService` 是一个以 C++ 为核心的后台时间轴运行时。它对应 `Docs/` 中的三份设计稿，当前实现覆盖：
+`NVTimelineService` 是一个以 C++ 为核心的后台时间轴运行时。当前实现覆盖：
 
 - 0.1 秒整数时间单位，以及 `manual` / `realtime` 两种逻辑时钟。
-- 每个 `.timeline.json` 文件包含一条时间轴；多个文件可以分别绑定同一或不同的时钟。
-- 启用/禁用轨道、同轨道不重叠的纯视觉 `clips`，以及稳定顺序的 `output` / `blocking` 标记。
+- 每个 `.timeline.json` 文件包含一条时间轴；一个 Service 当前加载一份文件，多文件协作暂列为后续扩展。
+- 启用/禁用轨道、同轨道不重叠的纯视觉 `clips`，以及稳定顺序的 `output` / `blocking` 标记；`output.wait_for_result` 可等待业务返回成功或失败。
 - 运行期间的 `listeners` 全程输入；暂停和阻塞等待期间仍然接收标签。
-- 统一 FIFO 标签队列、Callable 程序绑定和单轮派发上限。
+- 统一 FIFO 请求队列、Callable 程序绑定和单轮派发上限。
 - 严格 JSON 字段白名单、文档级 ID 计数器、引用与时间范围校验。
 
 ## 可视化编辑器
@@ -32,8 +32,10 @@ service.advance_clock(1, 10) # 推进 1 秒
 service.publish_label("puzzle_completed")
 ```
 
-业务绑定通过 `service.get_event_manager().register_binding(label, callable, requires_timeline_input)` 注册；回调收到一个 Dictionary 上下文，其中包含标签、来源、时间和已接收输入 ID。JSON 不保存 Callable、脚本路径或运行状态。`examples/basic.timeline.json` 可直接作为第一份测试编排。
+业务绑定通过 `service.get_event_manager().register_binding(label, callable, requires_timeline_input)` 注册；回调收到一个 Dictionary 上下文，其中包含标签、来源、时间和已接收输入 ID。等待结果的输出额外提供 `output_mark_id` 和运行 ID，业务回调完成后通过 `submit_request` 返回成功或失败。JSON 不保存 Callable、脚本路径或运行状态。`examples/basic.timeline.json` 可直接作为第一份测试编排。
 
-当前版本以 Godot `Callable` 作为跨语言接入点，C++ 负责时间推进、JSON、路由和运行状态；设计稿中的 C# `TimelineEventHandler` 工厂与托管生命周期包装会在 Callable 契约验证后继续补齐。
+事件回调中使用 `service.submit_request(request)` 统一排队发标签、时间轴控制、时钟推进、快进、跳转和输出结果。支持的 `type` 共 9 类，详细字段见 [时间轴运行时实现说明](../../Docs/时间轴运行时实现说明.md)。
 
-首版对设计稿中尚未定案的调度行为采用以下规则：同一时刻按轨道数组顺序和标记数组顺序求值；阻塞标记停住所属时间轴并丢弃本次推进的剩余单位；同一标签可以同时解除多个阻塞输入；共享时钟不会追赶被阻塞时间轴。
+当前版本以 Godot `Callable` 作为业务接入点，C++ 负责时间推进、JSON、标签路由、统一请求队列和时间轴等待结果；插件不创建或追踪项目的异步事件对象。
+
+调度规则：同一时刻按轨道数组顺序和标记数组顺序求值；普通时钟推进遇到阻塞时停住所属时间轴并丢弃本次剩余单位；快进遇阻后保留目标，成功解除后继续；跳转会跳过目标位置及之前的标记；同一标签可以同时解除多个阻塞输入。

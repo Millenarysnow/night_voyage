@@ -232,6 +232,7 @@ start 必须是非负整数，duration 必须是正整数。显示范围为 [sta
 | time | integer | 是 | 无 | 标记的时间位置，单位为 0.1 秒 |
 | kind | string | 是 | 无 | output 或 blocking |
 | label | string | 是 | 无 | 输出的标签，或期待的输入标签 |
+| wait_for_result | boolean | 否 | false | 仅 output 可用；是否等待业务回调返回成功或失败 |
 
 kind 已经表达方向，不额外保存 direction 字段。
 
@@ -251,7 +252,22 @@ kind 已经表达方向，不额外保存 direction 字段。
 
 含义：时间轴经过 10.0 秒位置时，发出 intro_finished 标签。
 
-输出配置只有标签。target、payload、handler、script、method 和处理类参数都不属于这个标记。
+输出配置只包含标签和是否等待结果。target、payload、handler、script、method 和处理类参数都不属于这个标记。
+
+普通输出保持 `wait_for_result: false` 的默认行为：发出标签后继续运行。设置为 `true` 时，发出标签后时间轴停在该标记，等待程序回调使用 `resolve_output_result` 返回成功或失败。成功则继续；失败则停止本次运行。插件只保存当前等待的运行 ID 和标记 ID，不创建或追踪业务处理对象，也不替业务代码计时。已有文件不需要增加该字段。
+
+~~~json
+{
+  "id": 6,
+  "name": "等待玩家完成操作",
+  "time": 100,
+  "kind": "output",
+  "label": "puzzle_start",
+  "wait_for_result": true
+}
+~~~
+
+业务代码可以在回调中等待 UI 或玩家输入。需要多种业务结果时，由业务代码根据结果发出不同输入标签；JSON 时间轴只等待统一的成功或失败，不定义业务返回值内容。
 
 如果需要实际触发某段表现的进入和离开，可以放置两个普通输出标记，分别发出两个标签。这两个标记与视觉片段相互独立，JSON 不从片段边界自动推导标签或业务生命周期。
 
