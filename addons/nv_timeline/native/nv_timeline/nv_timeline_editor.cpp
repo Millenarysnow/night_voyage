@@ -2298,10 +2298,11 @@ void NVTimelineEditorWindow::_on_track_header_gui_input(const Ref<InputEvent> &p
         // 右键菜单动作复用现有的新增函数；先选中轨道，确保片段和标记会
         // 写入用户实际右击的轨道，而不是沿用此前的选择对象。
         select_object(context_track_id);
-        // Window 自身继承 Viewport；这里必须读取插件窗口局部坐标。使用
-        // get_viewport() 会退回 Godot 主编辑器视口，导致弹出菜单偏到主窗口。
-        const Vector2 mouse_position = get_mouse_position();
-        track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
+        // PopupMenu 和插件窗口都属于编辑器的嵌入子窗口，popup() 需要父级
+        // 嵌入视口坐标。Window::get_position() 是插件窗口在父级中的位置，
+        // get_mouse_position() 是窗口内部位置，二者相加才是菜单应落点。
+        const Vector2i popup_position = get_position() + Vector2i(get_mouse_position());
+        track_context_menu->popup(Rect2i(popup_position, Vector2i(1, 1)));
         get_viewport()->set_input_as_handled();
     }
 }
@@ -2334,10 +2335,10 @@ void NVTimelineEditorWindow::_on_canvas_track_context_requested(int p_track_id) 
     }
     context_track_id = p_track_id;
     select_object(context_track_id);
-    // 画布右键入口与表头入口使用同一套插件窗口局部坐标，保证菜单不会
-    // 因为画布位于滚动容器中而被当成主编辑器坐标。
-    const Vector2 mouse_position = get_mouse_position();
-    track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
+    // 画布右键入口使用同样的父级坐标换算；滚动容器只影响窗口内部的
+    // mouse_position，不应改变插件窗口在编辑器中的整体偏移。
+    const Vector2i popup_position = get_position() + Vector2i(get_mouse_position());
+    track_context_menu->popup(Rect2i(popup_position, Vector2i(1, 1)));
     get_viewport()->set_input_as_handled();
 }
 
