@@ -26,6 +26,7 @@ class Label;
 class LineEdit;
 class MarginContainer;
 class OptionButton;
+class PopupMenu;
 class ScrollContainer;
 class SpinBox;
 class VBoxContainer;
@@ -56,6 +57,7 @@ class NVTimelineCanvas : public Control {
     };
 
     std::vector<VisualItem> items;
+    std::vector<int> track_ids;
     std::vector<float> track_row_tops;
     std::vector<float> track_row_heights;
     int track_count = 0;
@@ -73,6 +75,7 @@ class NVTimelineCanvas : public Control {
     float zoom = 1.0f;
     float pixels_per_unit = 9.0f;
     bool dragging = false;
+    bool scrubbing_playhead = false;
 
     static constexpr float RULER_HEIGHT = 34.0f;
     static constexpr float TRACK_HEIGHT = 58.0f;
@@ -170,7 +173,6 @@ class NVTimelineEditorWindow : public Window {
     Label *zoom_label = nullptr;
     Label *selection_label = nullptr;
     Label *id_value = nullptr;
-    Label *track_scope_hint = nullptr;
     LineEdit *name_edit = nullptr;
     CheckBox *enabled_check = nullptr;
     OptionButton *mode_picker = nullptr;
@@ -189,7 +191,9 @@ class NVTimelineEditorWindow : public Window {
     Button *redo_button = nullptr;
     FileDialog *file_dialog = nullptr;
     ConfirmationDialog *dirty_dialog = nullptr;
+    PopupMenu *track_context_menu = nullptr;
     bool file_dialog_saving = false;
+    int context_track_id = 0;
 
     static void _bind_methods();
     void build_ui();
@@ -245,6 +249,9 @@ class NVTimelineEditorWindow : public Window {
     void _on_apply_properties_pressed();
     void _on_zoom_changed(double p_value);
     void _on_track_header_pressed(int p_track_id);
+    void _on_track_header_gui_input(const Ref<InputEvent> &p_event, int p_track_id);
+    void _on_track_context_id_pressed(int p_menu_id);
+    void _on_canvas_track_context_requested(int p_track_id);
     void _on_track_enabled_toggled(bool p_enabled, int p_track_id);
     void _on_canvas_object_selected(int p_object_id);
     void _on_canvas_object_moved(int p_object_id, int p_start, int p_duration);

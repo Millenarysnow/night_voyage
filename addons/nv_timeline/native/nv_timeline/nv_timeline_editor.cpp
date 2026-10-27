@@ -15,6 +15,7 @@
 #include <godot_cpp/classes/line_edit.hpp>
 #include <godot_cpp/classes/margin_container.hpp>
 #include <godot_cpp/classes/option_button.hpp>
+#include <godot_cpp/classes/popup_menu.hpp>
 #include <godot_cpp/classes/scroll_container.hpp>
 #include <godot_cpp/classes/spin_box.hpp>
 #include <godot_cpp/classes/v_box_container.hpp>
@@ -142,11 +143,13 @@ void NVTimelineCanvas::_bind_methods() {
     ADD_SIGNAL(MethodInfo("object_moved", PropertyInfo(Variant::INT, "object_id"),
             PropertyInfo(Variant::INT, "start"), PropertyInfo(Variant::INT, "duration")));
     ADD_SIGNAL(MethodInfo("playhead_changed", PropertyInfo(Variant::INT, "time_units")));
+    ADD_SIGNAL(MethodInfo("track_context_requested", PropertyInfo(Variant::INT, "track_id")));
 }
 
 void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_zoom,
         int p_selected_id, int p_playhead_units) {
     items.clear();
+    track_ids.clear();
     track_row_tops.clear();
     track_row_heights.clear();
     selected_id = p_selected_id;
@@ -167,6 +170,7 @@ void NVTimelineCanvas::set_timeline_data(const Dictionary &p_timeline, float p_z
             continue;
         }
         const Dictionary track = tracks[track_index];
+        track_ids.push_back(int(track.get("id", 0)));
         const bool enabled = !track.has("enabled") || bool(track["enabled"]);
         const Array clips = track.get("clips", Array());
         for (int64_t i = 0; i < clips.size(); ++i) {
@@ -345,11 +349,18 @@ bool NVTimelineCanvas::find_item_at(const Vector2 &p_position, VisualItem &r_ite
         }
         const float left = static_cast<float>(it->start) * pixels_per_unit;
         const float right = static_cast<float>(it->start + it->duration) * pixels_per_unit;
-        const float top = track_row_tops[static_cast<size_t>(track_index)] +
-                5.0f + static_cast<float>(it->lane_index) * 23.0f;
-        if (x >= left && x <= right && p_position.y >= top && p_position.y <= top + 20.0f) {
+        const float row_top = track_row_tops[static_cast<size_t>(track_index)];
+        const float row_height = track_row_heights[static_cast<size_t>(track_index)];
+        // 命中区域必须和 draw_item 使用同一套几何计算，否则片段虽然已经
+        // 绘制为整行高度，鼠标却只能点到上半截，边缘缩放也会显得失灵。
+        const float top = row_top + 4.0f + static_cast<float>(it->lane_index) * 23.0f;
+        const float height = std::max(20.0f, row_height - 8.0f -
+                static_cast<float>(it->lane_index) * 23.0f);
+        if (x >= left && x <= right && p_position.y >= top && p_position.y <= top + height) {
             r_item = *it;
-            r_edge = x - left <= 7.0f ? -1 : (right - x <= 7.0f ? 1 : 0);
+            // 片段两端提供略宽于视觉边线的拖动热区，窄片段仍优先按左端处理，
+            // 避免左右热区在只有几个像素宽时互相覆盖。
+            r_edge = x - left <= 8.0f ? -1 : (right - x <= 8.0f ? 1 : 0);
             return true;
         }
     }
@@ -406,6 +417,14 @@ void NVTimelineCanvas::draw_item(const VisualItem &p_item, int p_stack_index) {
     draw_rect(block, fill, true);
     draw_rect(block, p_item.id == selected_id ? Color(0.96f, 0.96f, 0.98f, alpha) :
             Color(0.72f, 0.78f, 0.84f, alpha), false, p_item.id == selected_id ? 2.0f : 1.0f);
+    // 选中片段时强调左右边界，让用户能看出这两个位置可以拖动改变时长。
+    if (p_item.id == selected_id) {
+        const Color handle_color(0.98f, 0.88f, 0.48f, alpha);
+        draw_line(Vector2(x + 2.0f, lane_top + 2.0f),
+                Vector2(x + 2.0f, lane_top + lane_height - 2.0f), handle_color, 3.0f);
+        draw_line(Vector2(x + width - 2.0f, lane_top + 2.0f),
+                Vector2(x + width - 2.0f, lane_top + lane_height - 2.0f), handle_color, 3.0f);
+    }
     if (get_theme_default_font().is_valid()) {
         const float text_y = lane_top + std::min(lane_height - 4.0f, lane_height * 0.5f + 4.0f);
         draw_string(get_theme_default_font(), Vector2(x + 5.0f, text_y), p_item.name,
@@ -476,9 +495,40 @@ void NVTimelineCanvas::_draw() {
 
 void NVTimelineCanvas::_gui_input(const Ref<InputEvent> &p_event) {
     const Ref<InputEventMouseButton> mouse_button = p_event;
+    if (mouse_button.is_valid() && mouse_button->get_button_index() == MOUSE_BUTTON_RIGHT &&
+            mouse_button->is_pressed()) {
+        // 画布轨道区域也提供右键菜单入口。表头按钮和画布共享同一个
+        // track_context_requested 信号，用户不必精确点中左侧文字。
+        const Vector2 position = mouse_button->get_position();
+        for (int row = 0; row < static_cast<int>(track_row_tops.size()); ++row) {
+            const float row_top = track_row_tops[static_cast<size_t>(row)];
+            const float row_bottom = row_top + track_row_heights[static_cast<size_t>(row)];
+            if (position.y >= row_top && position.y < row_bottom &&
+                    row >= 0 && row < static_cast<int>(track_ids.size()) && track_ids[static_cast<size_t>(row)] != 0) {
+                emit_signal("track_context_requested", track_ids[static_cast<size_t>(row)]);
+                accept_event();
+                return;
+            }
+        }
+    }
+
     if (mouse_button.is_valid() && mouse_button->get_button_index() == MOUSE_BUTTON_LEFT) {
         const Vector2 position = mouse_button->get_position();
         if (mouse_button->is_pressed()) {
+            // 播放头只接受标尺区域的鼠标操作。轨道空白区域保持纯粹的编排
+            // 画布，不会因为误点而改变当前时间。
+            if (position.y < RULER_HEIGHT) {
+                scrubbing_playhead = true;
+                playhead_units = snap_to_units(position.x);
+                if (timeline_duration > 0) {
+                    playhead_units = std::min(playhead_units, timeline_duration);
+                }
+                emit_signal("playhead_changed", playhead_units);
+                queue_redraw();
+                accept_event();
+                return;
+            }
+
             VisualItem item;
             int edge = 0;
             if (find_item_at(position, item, edge)) {
@@ -492,11 +542,14 @@ void NVTimelineCanvas::_gui_input(const Ref<InputEvent> &p_event) {
                 resize_edge = edge;
                 dragging = true;
                 emit_signal("object_selected", selected_id);
-            } else {
-                playhead_units = snap_to_units(position.x);
-                emit_signal("playhead_changed", playhead_units);
             }
             queue_redraw();
+            accept_event();
+            return;
+        }
+
+        if (scrubbing_playhead) {
+            scrubbing_playhead = false;
             accept_event();
             return;
         }
@@ -514,6 +567,18 @@ void NVTimelineCanvas::_gui_input(const Ref<InputEvent> &p_event) {
     }
 
     const Ref<InputEventMouseMotion> mouse_motion = p_event;
+    if (mouse_motion.is_valid() && scrubbing_playhead) {
+        // 按住标尺拖动时持续更新播放头，而不是只响应按下瞬间。
+        playhead_units = snap_to_units(mouse_motion->get_position().x);
+        if (timeline_duration > 0) {
+            playhead_units = std::min(playhead_units, timeline_duration);
+        }
+        emit_signal("playhead_changed", playhead_units);
+        queue_redraw();
+        accept_event();
+        return;
+    }
+
     if (mouse_motion.is_valid() && dragging) {
         const int delta = snap_to_units(mouse_motion->get_position().x) - drag_origin_units;
         const auto it = std::find_if(items.begin(), items.end(), [this](const VisualItem &p_item) {
@@ -540,6 +605,38 @@ void NVTimelineCanvas::_gui_input(const Ref<InputEvent> &p_event) {
             } else {
                 preview_start = std::min(preview_start, timeline_duration - 1);
                 preview_duration = std::max(1, std::min(preview_duration, timeline_duration - preview_start));
+            }
+        }
+
+        // 拖动预览阶段也遵守“同一轨道片段不能重叠”的规则，避免用户松开鼠标
+        // 前短暂看到一个最终无法提交的重叠状态。只检查当前片段同轨道的其他片段，
+        // 标签标记不占用片段空间。
+        if (!it->is_mark) {
+            int previous_end = 0;
+            int next_start = timeline_duration > 0 ? timeline_duration : std::numeric_limits<int>::max();
+            const int original_end = it->start + it->duration;
+            for (const VisualItem &other : items) {
+                if (other.is_mark || other.id == dragging_id || other.track_index != it->track_index) {
+                    continue;
+                }
+                const int other_end = other.start + other.duration;
+                if (other_end <= it->start) {
+                    previous_end = std::max(previous_end, other_end);
+                } else if (other.start >= original_end) {
+                    next_start = std::min(next_start, other.start);
+                }
+            }
+
+            if (resize_edge == 0) {
+                const int maximum_start = next_start == std::numeric_limits<int>::max() ?
+                        std::numeric_limits<int>::max() - preview_duration : next_start - preview_duration;
+                preview_start = std::clamp(preview_start, previous_end, maximum_start);
+            } else if (resize_edge < 0) {
+                preview_start = std::clamp(preview_start, previous_end, original_end - 1);
+                preview_duration = original_end - preview_start;
+            } else {
+                const int maximum_duration = std::max(1, next_start - it->start);
+                preview_duration = std::clamp(preview_duration, 1, maximum_duration);
             }
         }
         queue_redraw();
@@ -587,6 +684,10 @@ void NVTimelineEditorWindow::_bind_methods() {
     ClassDB::bind_method(D_METHOD("_on_apply_properties_pressed"), &NVTimelineEditorWindow::_on_apply_properties_pressed);
     ClassDB::bind_method(D_METHOD("_on_zoom_changed", "value"), &NVTimelineEditorWindow::_on_zoom_changed);
     ClassDB::bind_method(D_METHOD("_on_track_header_pressed", "track_id"), &NVTimelineEditorWindow::_on_track_header_pressed);
+    ClassDB::bind_method(D_METHOD("_on_track_header_gui_input", "event", "track_id"),
+            &NVTimelineEditorWindow::_on_track_header_gui_input);
+    ClassDB::bind_method(D_METHOD("_on_track_context_id_pressed", "menu_id"),
+            &NVTimelineEditorWindow::_on_track_context_id_pressed);
     ClassDB::bind_method(D_METHOD("_on_track_enabled_toggled", "enabled", "track_id"),
             &NVTimelineEditorWindow::_on_track_enabled_toggled);
     ClassDB::bind_method(D_METHOD("_on_canvas_object_selected", "object_id"),
@@ -595,6 +696,8 @@ void NVTimelineEditorWindow::_bind_methods() {
             &NVTimelineEditorWindow::_on_canvas_object_moved);
     ClassDB::bind_method(D_METHOD("_on_canvas_playhead_changed", "time_units"),
             &NVTimelineEditorWindow::_on_canvas_playhead_changed);
+    ClassDB::bind_method(D_METHOD("_on_canvas_track_context_requested", "track_id"),
+            &NVTimelineEditorWindow::_on_canvas_track_context_requested);
 }
 
 NVTimelineEditorWindow::NVTimelineEditorWindow() {
@@ -756,6 +859,7 @@ void NVTimelineEditorWindow::build_ui() {
     canvas->connect("object_selected", Callable(this, "_on_canvas_object_selected"));
     canvas->connect("object_moved", Callable(this, "_on_canvas_object_moved"));
     canvas->connect("playhead_changed", Callable(this, "_on_canvas_playhead_changed"));
+    canvas->connect("track_context_requested", Callable(this, "_on_canvas_track_context_requested"));
     time_scroll->add_child(canvas);
 
     inspector_panel = memnew(VBoxContainer);
@@ -771,10 +875,6 @@ void NVTimelineEditorWindow::build_ui() {
     // ID 只用于 JSON 引用和程序内部定位，不作为用户可见的编辑属性。
     id_value->set_visible(false);
     inspector_panel->add_child(id_value);
-    track_scope_hint = memnew(Label);
-    track_scope_hint->set_autowrap_mode(TextServer::AUTOWRAP_WORD_SMART);
-    track_scope_hint->set_visible(false);
-    inspector_panel->add_child(track_scope_hint);
 
     name_edit = memnew(LineEdit);
     name_edit->set_placeholder(utf8("名称"));
@@ -913,6 +1013,15 @@ void NVTimelineEditorWindow::configure_dialogs() {
     dirty_dialog->get_ok_button()->set_text(utf8("放弃修改"));
     dirty_dialog->connect("confirmed", Callable(this, "_on_dirty_confirmed"));
     add_child(dirty_dialog);
+
+    // 轨道右键菜单只保存临时的轨道 ID，具体新增动作仍走现有文档编辑函数，
+    // 因此不会为右键操作引入第二套 JSON 修改路径。
+    track_context_menu = memnew(PopupMenu);
+    track_context_menu->add_item(utf8("新增片段"), 0);
+    track_context_menu->add_item(utf8("新增输出标记"), 1);
+    track_context_menu->add_item(utf8("新增阻塞输入"), 2);
+    track_context_menu->connect("id_pressed", Callable(this, "_on_track_context_id_pressed"));
+    add_child(track_context_menu);
 }
 
 void NVTimelineEditorWindow::refresh_all() {
@@ -994,10 +1103,15 @@ void NVTimelineEditorWindow::refresh_track_headers() {
     }
 
     // 画布标尺左侧显示当前时间轴名称，并允许直接点击它选中时间轴对象。
-    // 这样可以从画布入口进入右侧的时长编辑属性，不必先猜测左侧下拉框的作用。
+    // 这样可以从画布入口进入右侧的时长编辑属性；按钮采用明显的填充样式，
+    // 避免用户把它误认为只是表头文字。
     Button *ruler_spacer = memnew(Button);
-    ruler_spacer->set_text(utf8("时间轴"));
-    ruler_spacer->set_flat(true);
+    ruler_spacer->set_text(utf8("时间轴："));
+    ruler_spacer->set_flat(false);
+    ruler_spacer->set_text_alignment(HORIZONTAL_ALIGNMENT_LEFT);
+    ruler_spacer->add_theme_font_size_override("font_size", 15);
+    ruler_spacer->add_theme_color_override("font_color", Color(0.90f, 0.93f, 0.98f, 1.0f));
+    ruler_spacer->add_theme_color_override("font_hover_color", Color(1.0f, 0.93f, 0.60f, 1.0f));
     ruler_spacer->set_tooltip_text(utf8("选择当前时间轴并编辑总时长"));
     ruler_spacer->set_custom_minimum_size(Vector2(188.0f, NVTimelineCanvas::RULER_HEIGHT));
     ruler_spacer->set_h_size_flags(Control::SIZE_EXPAND_FILL);
@@ -1011,7 +1125,7 @@ void NVTimelineEditorWindow::refresh_track_headers() {
     }
     const Array timelines = data.get("timelines", Array());
     const Dictionary timeline = timelines[timeline_index];
-    ruler_spacer->set_text(display_name(timeline, utf8("时间轴")));
+    ruler_spacer->set_text(utf8("时间轴：") + display_name(timeline, utf8("未命名时间轴")));
     const Array tracks = timeline.get("tracks", Array());
     for (int64_t i = 0; i < tracks.size(); ++i) {
         const Dictionary track = tracks[i];
@@ -1029,6 +1143,9 @@ void NVTimelineEditorWindow::refresh_track_headers() {
         select->set_pressed(id == selected_object_id);
         select->set_h_size_flags(Control::SIZE_EXPAND_FILL);
         select->connect("pressed", Callable(this, "_on_track_header_pressed").bind(id));
+        // 表头单独接收 GUI 输入，右键时弹出针对当前轨道的新增菜单；左键
+        // 仍由 pressed 信号走原有选择逻辑。
+        select->connect("gui_input", Callable(this, "_on_track_header_gui_input").bind(id));
         row->add_child(select);
         track_headers->add_child(row);
     }
@@ -1056,8 +1173,6 @@ void NVTimelineEditorWindow::refresh_inspector() {
     apply_button->set_visible(false);
     remove_selected_button->set_visible(false);
     id_value->set_text("");
-    track_scope_hint->set_text("");
-    track_scope_hint->set_visible(false);
 
     ObjectLocation location = get_selected_object();
     if (!location.valid) {
@@ -1105,22 +1220,9 @@ void NVTimelineEditorWindow::refresh_inspector() {
             set_property_row_visibility(unlimited_check, true);
             set_property_row_visibility(duration_spin, true);
         } break;
-        case OBJECT_TRACK: {
-            const Array timelines = document->get_data().get("timelines", Array());
-            const Dictionary timeline = location.timeline_index >= 0 &&
-                    location.timeline_index < timelines.size() ? Dictionary(timelines[location.timeline_index]) : Dictionary();
-            const String timeline_name = display_name(timeline, utf8("当前时间轴"));
-            const Variant timeline_duration = timeline.get("duration", Variant());
-            if (timeline_duration.get_type() == Variant::INT) {
-                track_scope_hint->set_text(utf8("轨道长度由时间轴“") + timeline_name + utf8("”统一控制：") +
-                        String::num_real(double(timeline_duration) / 10.0, 1) + utf8(" 秒。请选择时间轴对象修改。"));
-            } else {
-                track_scope_hint->set_text(utf8("轨道长度由时间轴“") + timeline_name +
-                        utf8("”统一控制：不限时长。请选择时间轴对象修改。"));
-            }
-            track_scope_hint->set_visible(true);
+        case OBJECT_TRACK:
             set_property_row_visibility(enabled_check, true);
-        } break;
+            break;
         case OBJECT_CLIP:
             remove_selected_button->set_text(utf8("删除片段"));
             remove_selected_button->set_visible(true);
@@ -2183,6 +2285,56 @@ void NVTimelineEditorWindow::_on_track_header_pressed(int p_track_id) {
     if (!refreshing) {
         select_object(p_track_id);
     }
+}
+
+void NVTimelineEditorWindow::_on_track_header_gui_input(const Ref<InputEvent> &p_event, int p_track_id) {
+    if (refreshing || track_context_menu == nullptr || !is_visible()) {
+        return;
+    }
+    const Ref<InputEventMouseButton> mouse_button = p_event;
+    if (mouse_button.is_valid() && mouse_button->get_button_index() == MOUSE_BUTTON_RIGHT &&
+            mouse_button->is_pressed()) {
+        context_track_id = p_track_id;
+        // 右键菜单动作复用现有的新增函数；先选中轨道，确保片段和标记会
+        // 写入用户实际右击的轨道，而不是沿用此前的选择对象。
+        select_object(context_track_id);
+        const Vector2 mouse_position = get_viewport()->get_mouse_position();
+        track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
+        get_viewport()->set_input_as_handled();
+    }
+}
+
+void NVTimelineEditorWindow::_on_track_context_id_pressed(int p_menu_id) {
+    if (context_track_id == 0) {
+        return;
+    }
+    // 菜单可能在弹出后才收到选择信号，再次选中轨道可以抵御窗口刷新或
+    // 外部脚本改变选中对象的情况。
+    select_object(context_track_id);
+    switch (p_menu_id) {
+        case 0:
+            _on_add_clip_pressed();
+            break;
+        case 1:
+            _on_add_output_pressed();
+            break;
+        case 2:
+            _on_add_blocking_pressed();
+            break;
+        default:
+            break;
+    }
+}
+
+void NVTimelineEditorWindow::_on_canvas_track_context_requested(int p_track_id) {
+    if (refreshing || track_context_menu == nullptr || !is_visible() || p_track_id == 0) {
+        return;
+    }
+    context_track_id = p_track_id;
+    select_object(context_track_id);
+    const Vector2 mouse_position = get_viewport()->get_mouse_position();
+    track_context_menu->popup(Rect2i(Vector2i(mouse_position), Vector2i(1, 1)));
+    get_viewport()->set_input_as_handled();
 }
 
 void NVTimelineEditorWindow::_on_track_enabled_toggled(bool p_enabled, int p_track_id) {
