@@ -254,6 +254,8 @@ kind 已经表达方向，不额外保存 direction 字段。
 
 输出配置只包含标签和是否等待结果。target、payload、handler、script、method 和处理类参数都不属于这个标记。
 
+可视化编辑器选中 `output` 标记后，可以在属性面板勾选“等待业务结果”；保存时写入 `wait_for_result: true`。切换为 `blocking` 标记时，该选项隐藏并从对象中移除，避免生成不合法的组合。
+
 普通输出保持 `wait_for_result: false` 的默认行为：发出标签后继续运行。设置为 `true` 时，发出标签后时间轴停在该标记，等待程序回调使用 `resolve_output_result` 返回成功或失败。成功则继续；失败则停止本次运行。插件只保存当前等待的运行 ID 和标记 ID，不创建或追踪业务处理对象，也不替业务代码计时。已有文件不需要增加该字段。
 
 ~~~json

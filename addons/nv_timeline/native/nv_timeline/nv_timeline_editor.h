@@ -183,6 +183,7 @@ class NVTimelineEditorWindow : public Window {
     SpinBox *start_spin = nullptr;
     SpinBox *time_spin = nullptr;
     OptionButton *mark_kind_picker = nullptr;
+    CheckBox *wait_for_result_check = nullptr;
     LineEdit *label_edit = nullptr;
     ColorPickerButton *color_picker = nullptr;
     Button *apply_button = nullptr;
@@ -247,6 +248,7 @@ class NVTimelineEditorWindow : public Window {
     void _on_remove_listener_pressed();
     void _on_remove_selected_visual_object_pressed();
     void _on_apply_properties_pressed();
+    void _on_mark_kind_selected(int p_index);
     void _on_zoom_changed(double p_value);
     void _on_track_header_pressed(int p_track_id);
     void _on_track_header_gui_input(const Ref<InputEvent> &p_event, int p_track_id);

@@ -683,6 +683,7 @@ void NVTimelineEditorWindow::_bind_methods() {
     ClassDB::bind_method(D_METHOD("_on_remove_selected_visual_object_pressed"),
             &NVTimelineEditorWindow::_on_remove_selected_visual_object_pressed);
     ClassDB::bind_method(D_METHOD("_on_apply_properties_pressed"), &NVTimelineEditorWindow::_on_apply_properties_pressed);
+    ClassDB::bind_method(D_METHOD("_on_mark_kind_selected", "index"), &NVTimelineEditorWindow::_on_mark_kind_selected);
     ClassDB::bind_method(D_METHOD("_on_zoom_changed", "value"), &NVTimelineEditorWindow::_on_zoom_changed);
     ClassDB::bind_method(D_METHOD("_on_track_header_pressed", "track_id"), &NVTimelineEditorWindow::_on_track_header_pressed);
     ClassDB::bind_method(D_METHOD("_on_track_header_gui_input", "event", "track_id"),
@@ -935,8 +936,14 @@ void NVTimelineEditorWindow::build_ui() {
     mark_kind_picker->set_item_id(0, 0);
     mark_kind_picker->add_item(utf8("阻塞输入"));
     mark_kind_picker->set_item_id(1, 1);
+    mark_kind_picker->connect("item_selected", Callable(this, "_on_mark_kind_selected"));
     HBoxContainer *kind_row = create_property_row(utf8("标记类型"), mark_kind_picker);
     inspector_panel->add_child(kind_row);
+    wait_for_result_check = memnew(CheckBox);
+    wait_for_result_check->set_text(utf8("等待业务结果"));
+    wait_for_result_check->set_tooltip_text(utf8("输出标签发出后暂停时间轴，直到程序返回成功或失败结果"));
+    HBoxContainer *wait_for_result_row = create_property_row(utf8("输出处理"), wait_for_result_check);
+    inspector_panel->add_child(wait_for_result_row);
     label_edit = memnew(LineEdit);
     label_edit->set_placeholder(utf8("区分大小写的标签"));
     HBoxContainer *label_row = create_property_row(utf8("标签"), label_edit);
@@ -964,9 +971,9 @@ void NVTimelineEditorWindow::build_ui() {
     root->add_child(status_label);
 
     // 初始属性面板由 refresh_inspector 按选中对象决定显示哪些字段。
-    const std::array<Control *, 12> property_controls = {name_edit, enabled_check, mode_picker, rate_spin,
+    const std::array<Control *, 13> property_controls = {name_edit, enabled_check, mode_picker, rate_spin,
             timeline_clock_picker, unlimited_check, duration_spin, start_spin, time_spin,
-            mark_kind_picker, label_edit, color_picker};
+            mark_kind_picker, wait_for_result_check, label_edit, color_picker};
     for (Control *control : property_controls) {
         set_property_row_visibility(control, false);
     }
@@ -1172,9 +1179,9 @@ void NVTimelineEditorWindow::refresh_canvas() {
 }
 
 void NVTimelineEditorWindow::refresh_inspector() {
-    const std::array<Control *, 12> property_controls = {name_edit, enabled_check, mode_picker, rate_spin,
+    const std::array<Control *, 13> property_controls = {name_edit, enabled_check, mode_picker, rate_spin,
             timeline_clock_picker, unlimited_check, duration_spin, start_spin, time_spin,
-            mark_kind_picker, label_edit, color_picker};
+            mark_kind_picker, wait_for_result_check, label_edit, color_picker};
     for (Control *control : property_controls) {
         set_property_row_visibility(control, false);
     }
@@ -1247,9 +1254,11 @@ void NVTimelineEditorWindow::refresh_inspector() {
             time_spin->set_value(int(object.get("time", 0)));
             const bool blocking = String(object.get("kind", "output")) == "blocking";
             mark_kind_picker->select(blocking ? 1 : 0);
+            wait_for_result_check->set_pressed(bool(object.get("wait_for_result", false)));
             label_edit->set_text(String(object.get("label", String())));
             set_property_row_visibility(time_spin, true);
             set_property_row_visibility(mark_kind_picker, true);
+            set_property_row_visibility(wait_for_result_check, !blocking);
             set_property_row_visibility(label_edit, true);
         } break;
         case OBJECT_LISTENER:
@@ -2265,8 +2274,16 @@ void NVTimelineEditorWindow::_on_apply_properties_pressed() {
             break;
         case OBJECT_MARK: {
             updated["time"] = static_cast<int>(time_spin->get_value());
-            updated["kind"] = mark_kind_picker->get_selected_id() == 1 ? "blocking" : "output";
+            const bool blocking = mark_kind_picker->get_selected_id() == 1;
+            updated["kind"] = blocking ? "blocking" : "output";
             updated["label"] = label_edit->get_text().strip_edges();
+            // 等待结果是输出标记专属字段；关闭开关或切换成阻塞输入时移除默认值，
+            // 保证编辑器生成的数据与 Document 对标记类型的约束一致。
+            if (!blocking && wait_for_result_check->is_pressed()) {
+                updated["wait_for_result"] = true;
+            } else {
+                updated.erase("wait_for_result");
+            }
         } break;
     }
 
@@ -2308,6 +2325,21 @@ void NVTimelineEditorWindow::_on_apply_properties_pressed() {
     if (!replace_object(location, updated)) {
         return;
     }
+}
+
+void NVTimelineEditorWindow::_on_mark_kind_selected(int p_index) {
+    if (refreshing || p_index < 0 || p_index >= mark_kind_picker->get_item_count()) {
+        return;
+    }
+    const ObjectLocation location = get_selected_object();
+    if (!location.valid || location.type != OBJECT_MARK) {
+        return;
+    }
+
+    // 面板编辑尚未应用时也要即时反馈字段适用范围；保留复选框的临时值，
+    // 方便用户在输出和阻塞输入之间切换后再决定是否保存。
+    const bool is_output = mark_kind_picker->get_item_id(p_index) == 0;
+    set_property_row_visibility(wait_for_result_check, is_output);
 }
 
 void NVTimelineEditorWindow::_on_zoom_changed(double p_value) {
