@@ -2,6 +2,10 @@
 **/.DS_Store
 **/.godot
 
+# Godot 编辑器在项目旁写入的本机用户数据、恢复锁和编辑器设置；这些内容
+# 随机器和当前用户变化，不属于项目资源。
+/Godot/
+
 # CMake / 原生编译缓存与本机二进制；保留 .gdextension 和 Godot 的 .uid 文件。
 /cmake-build-*/
 /build/
@@ -29,3 +33,11 @@
 # 由现有 CMake 下载的 IDE 插件及本地验收输出。
 /addons/rider-plugin/
 /artifacts/
+
+# .NET/IDE 本机状态与编辑器生成的旧工程备份；项目工程文件和 C# 源码仍保留。
+.vs/
+*.csproj.user
+*.suo
+*.csproj.old
+/obj/
+**/obj/
