@@ -12,7 +12,7 @@ config_version=5
 
 config/name="night_voyage"
 run/main_scene="res://addons/night_voyageExt/examples/display_pipeline_demo.tscn"
-config/features=PackedStringArray("4.8", "GL Compatibility")
+config/features=PackedStringArray("4.8", "C#", "GL Compatibility")
 
 [dotnet]
 
@@ -20,7 +20,7 @@ project/assembly_name="night_voyage"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/rider-plugin/plugin.cfg")
+enabled=PackedStringArray("res://addons/nv_timeline/plugin.cfg", "res://addons/rider-plugin/plugin.cfg")
 
 [rendering]
 

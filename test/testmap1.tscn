@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://c8f6xa1qbxtpm"]
+
+[ext_resource type="Script" uid="uid://byk8whd70ct74" path="res://test/test1.gd" id="1_wiyv3"]
+[ext_resource type="Script" uid="uid://8un2epi6yo5n" path="res://test/node_2.gd" id="2_ujyva"]
+
+[node name="Testmap1" type="Node2D" unique_id=1956914271]
+
+[node name="Node" type="Node" parent="." unique_id=216008178]
+script = ExtResource("1_wiyv3")
+
+[node name="Node2" type="Node" parent="." unique_id=1358475950]
+script = ExtResource("2_ujyva")
