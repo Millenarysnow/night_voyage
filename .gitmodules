@@ -2,3 +2,6 @@
 	path = native/night_voyageExt/godot-cpp
 	url = https://github.com/godotengine/godot-cpp
 	branch = master
+[submodule "native/godot_cef"]
+	path = native/godot_cef
+	url = https://github.com/dsh0416/godot-cef.git
