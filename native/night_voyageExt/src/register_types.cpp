@@ -17,6 +17,7 @@
 #include "ui/nv_screen_effect_viewport.h"
 #include "ui/nv_footage_effect.h"
 #include "examples/nv_effects_demo.h"
+#include "game/nv_prologue_state.h"
 
 using namespace godot;
 
@@ -40,6 +41,8 @@ void initialize_gdextension_types(ModuleInitializationLevel p_level)
     GDREGISTER_CLASS(NVScreenEffectViewport);
     GDREGISTER_CLASS(NVFootageEffect);
     GDREGISTER_CLASS(NVEffectsDemo);
+    // 序章状态机是项目侧的权威逻辑，界面层通过操作接口访问它。
+    GDREGISTER_CLASS(NVPrologueState);
 }
 
 void uninitialize_gdextension_types(ModuleInitializationLevel p_level) {
