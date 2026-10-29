@@ -1,0 +1,90 @@
+[gd_scene format=3]
+
+[node name="RuntimeContent" type="Control"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ToggleButton" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -84.0
+offset_top = -52.0
+offset_right = -16.0
+offset_bottom = -16.0
+grow_horizontal = 0
+grow_vertical = 0
+text = "IPC"
+
+[node name="InspectorPanel" type="PanelContainer" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -560.0
+offset_top = -420.0
+offset_right = -16.0
+offset_bottom = -68.0
+grow_horizontal = 0
+grow_vertical = 0
+
+[node name="Margin" type="MarginContainer" parent="InspectorPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+
+[node name="VBox" type="VBoxContainer" parent="InspectorPanel/Margin"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Header" type="HBoxContainer" parent="InspectorPanel/Margin/VBox"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="InspectorPanel/Margin/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 1
+text = "IPC Inspector"
+
+[node name="Spacer" type="Control" parent="InspectorPanel/Margin/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DirectionFilter" type="OptionButton" parent="InspectorPanel/Margin/VBox/Header"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+
+[node name="ClearButton" type="Button" parent="InspectorPanel/Margin/VBox/Header"]
+layout_mode = 2
+text = "Clear"
+
+[node name="Scroll" type="ScrollContainer" parent="InspectorPanel/Margin/VBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="MessageList" type="VBoxContainer" parent="InspectorPanel/Margin/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="EmptyLabel" type="Label" parent="InspectorPanel/Margin/VBox"]
+layout_mode = 2
+text = "Waiting for IPC messages..."
+horizontal_alignment = 1
+vertical_alignment = 1
+autowrap_mode = 3

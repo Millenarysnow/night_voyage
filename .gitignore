@@ -17,6 +17,10 @@
 /addons/night_voyageExt/bin/ios/
 /addons/night_voyageExt/bin/web/
 
+# Godot CEF 的源码保留在 native/godot_cef 子模块；这里仅提交扩展描述与资源，
+# Windows/Linux/macOS 的 CEF 运行库和本地编译 DLL 由构建脚本生成，不进入版本控制。
+/addons/godot_cef/bin/
+
 # NV Timeline 的本机编译产物；源码和 .gdextension 配置进入版本控制，平台 DLL
 # 由本机 CMake 重新生成，避免把 20MB 级调试库写入提交。
 /addons/nv_timeline/bin/
