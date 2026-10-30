@@ -1,6 +1,6 @@
 [gd_resource type="NVWarpProfile" format=3]
 
 [resource]
-radial_strength = 0.12
+radial_strength = 0.024
 center = Vector2(0.5, 0.48)
 displacement_scale_px = Vector2(84, 84)
