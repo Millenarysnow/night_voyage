@@ -89,11 +89,12 @@ Godot 当前向网页发送完整状态快照，而不是逐项拼接页面字�
   "article_text_collected": true,
   "article_image_collected": false,
   "article_image_width": 380,
-  "forum_image_width": 0
+  "forum_image_width": 0,
+  "empty_message": ""
 }
 ```
 
-该回执不是剧情操作，不能改变游戏状态；生产界面可以忽略它。`article_image_width` 和 `forum_image_width` 为当前 DOM 图片的自然宽度，数值为零表示图片尚未解码或当前页面没有该图片。
+该回执不是剧情操作，不能改变游戏状态；生产界面可以忽略它。`article_image_width` 和 `forum_image_width` 为当前 DOM 图片的自然宽度，数值为零表示图片尚未解码或当前页面没有该图片。`empty_message` 是当前搜索结果为空时页面显示的说明文字，正常有结果时为空字符串。
 
 ## 规则边界
 
