@@ -1,6 +1,73 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=10 format=3]
 
-[ext_resource type="PackedScene" path="res://content/prologue/scenes/free_drop_zone.tscn" id="1_free_drop"]
+[ext_resource type="Script" path="res://content/prologue/scripts/BoardView.cs" id="1_board"]
+[ext_resource type="Script" path="res://content/prologue/scripts/BoardCanvasView.cs" id="2_canvas"]
+[ext_resource type="Script" path="res://content/prologue/scripts/BoardLinksView.cs" id="3_links"]
+
+[sub_resource type="StyleBoxFlat" id="toolbar"]
+bg_color = Color(0.055, 0.078, 0.105, 0.96)
+border_color = Color(0.263, 0.329, 0.384, 1)
+border_width_bottom = 1
+content_margin_left = 12.0
+content_margin_right = 12.0
+content_margin_top = 8.0
+content_margin_bottom = 8.0
+
+[sub_resource type="StyleBoxFlat" id="canvas"]
+bg_color = Color(0.031, 0.047, 0.067, 1)
+border_color = Color(0.165, 0.22, 0.267, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+
+[sub_resource type="StyleBoxFlat" id="marquee"]
+bg_color = Color(0.42, 0.67, 0.86, 0.12)
+border_color = Color(0.42, 0.67, 0.86, 0.8)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+
+[sub_resource type="StyleBoxFlat" id="title"]
+bg_color = Color(0.09, 0.137, 0.18, 0.94)
+border_color = Color(0.475, 0.373, 0.192, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
+[sub_resource type="StyleBoxFlat" id="button"]
+bg_color = Color(0.114, 0.153, 0.204, 1)
+border_color = Color(0.263, 0.329, 0.384, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="button_hover"]
+bg_color = Color(0.18, 0.247, 0.31, 1)
+border_color = Color(0.82, 0.66, 0.35, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
 
 [node name="BoardContentRoot" type="Control"]
 anchors_preset = 15
@@ -8,44 +75,239 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_board")
+TreeWidth = 320.0
+TaskIndent = 22.0
+ClueIndent = 44.0
+FreeCardGap = 14.0
+TaskGap = 12.0
+AttachedCardGap = 10.0
+FreeCardTop = 22.0
+FreeCardOffset = 36.0
+TreeTrunkX = 7.0
+BranchInset = 6.0
+AttachedCardTopGap = 22.0
+DropPadding = 10.0
 
-[node name="BoardScroll" type="ScrollContainer" parent="."]
+[node name="Toolbar" type="PanelContainer" parent="."]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 46.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("toolbar")
+
+[node name="Buttons" type="HBoxContainer" parent="Toolbar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ZoomOut" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(32, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "缩小白板"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "−"
+
+[node name="ZoomIn" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(32, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "放大白板"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "+"
+
+[node name="ResetZoom" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "恢复 100%"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "100%"
+
+[node name="RotateLeft" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(32, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "向左旋转白板"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "↺"
+
+[node name="RotateRight" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(32, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "向右旋转白板"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "↻"
+
+[node name="ResetRotation" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "恢复零度"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "0°"
+
+[node name="FocusSelected" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "聚焦选中线索"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "聚焦"
+
+[node name="FitAll" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "全览白板"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "全览"
+
+[node name="ResetView" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "重置白板视角"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "重置"
+
+[node name="Tidy" type="Button" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(52, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "重新排卡片，恢复单卡大小与角度，保留批注和任务归属"
+theme_override_styles/normal = SubResource("button")
+theme_override_styles/hover = SubResource("button_hover")
+text = "整理"
+
+[node name="ZoomText" type="Label" parent="Toolbar/Buttons"]
+layout_mode = 2
+text = "缩放"
+
+[node name="ZoomValue" type="Label" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(46, 0)
+layout_mode = 2
+text = "100%"
+
+[node name="RotationText" type="Label" parent="Toolbar/Buttons"]
+layout_mode = 2
+text = "角度"
+
+[node name="RotationValue" type="Label" parent="Toolbar/Buttons"]
+custom_minimum_size = Vector2(34, 0)
+layout_mode = 2
+text = "0°"
+
+[node name="Count" type="Label" parent="Toolbar/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "0 张线索"
+horizontal_alignment = 2
+
+[node name="BoardCanvas" type="Control" parent="."]
+clip_contents = true
+focus_mode = 2
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 12.0
-offset_top = 12.0
-offset_right = -12.0
-offset_bottom = -12.0
+offset_top = 46.0
 grow_horizontal = 2
 grow_vertical = 2
-horizontal_scroll_mode = 0
+mouse_filter = 0
+script = ExtResource("2_canvas")
+MinimumZoom = 0.15
+MaximumZoom = 4.0
+MaximumFitZoom = 1.15
+WheelZoomStep = 1.15
+FitPadding = 26.0
 
-[node name="BoardContent" type="VBoxContainer" parent="BoardScroll"]
-custom_minimum_size = Vector2(870, 520)
-theme_override_constants/separation = 12
+[node name="Background" type="Panel" parent="BoardCanvas"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("canvas")
 
-[node name="Heading" type="Label" parent="BoardScroll/BoardContent"]
-theme_override_colors/font_color = Color(0.941, 0.776, 0.427, 1)
-theme_override_font_sizes/font_size = 18
-text = "今晚要办的事 · 找到年糕"
+[node name="BoardWorld" type="Control" parent="BoardCanvas"]
+anchors_preset = 0
+anchor_right = 0.0
+anchor_bottom = 0.0
+mouse_filter = 2
 
-[node name="QuestTasks" type="VBoxContainer" parent="BoardScroll/BoardContent"]
-theme_override_constants/separation = 12
+[node name="Links" type="Control" parent="BoardCanvas/BoardWorld"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_links")
+MainLineColor = Color(0.851, 0.643, 0.255, 0.6)
+SecondaryLineColor = Color(0.851, 0.643, 0.255, 0.4)
+MainLineWidth = 2.0
+SecondaryLineWidth = 1.5
+SecondaryDashLength = 4.0
 
-[node name="Finished" type="Label" parent="BoardScroll/BoardContent"]
+[node name="TreeTitle" type="PanelContainer" parent="BoardCanvas/BoardWorld"]
+offset_left = 22.0
+offset_top = 22.0
+offset_right = 322.0
+offset_bottom = 82.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("title")
+
+[node name="QuestTitle" type="RichTextLabel" parent="BoardCanvas/BoardWorld/TreeTitle"]
+layout_mode = 2
+bbcode_enabled = true
+fit_content = true
+mouse_filter = 2
+text = "今晚要办的事"
+
+[node name="QuestStatus" type="Label" parent="BoardCanvas/BoardWorld"]
 visible = false
-theme_override_colors/font_color = Color(0.553, 0.851, 0.659, 1)
-theme_override_font_sizes/font_size = 17
-text = "年糕已经平安回家 · 任务完成"
+offset_left = 22.0
+offset_top = 88.0
+offset_right = 322.0
+offset_bottom = 112.0
+mouse_filter = 2
+theme_override_font_sizes/font_size = 11
+theme_override_colors/font_color = Color(0.55, 0.85, 0.66, 1)
+text = "任务状态"
 
-[node name="ReadyMessage" type="Label" parent="BoardScroll/BoardContent"]
+[node name="TaskLayer" type="Control" parent="BoardCanvas/BoardWorld"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="ClueLayer" type="Control" parent="BoardCanvas/BoardWorld"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Marquee" type="Panel" parent="BoardCanvas"]
 visible = false
-theme_override_colors/font_color = Color(0.553, 0.851, 0.659, 1)
-text = "两条子任务已经对上，回到暗线向林越报告位置。"
-
-[node name="LooseTitle" type="Label" parent="BoardScroll/BoardContent"]
-theme_override_colors/font_color = Color(0.82, 0.85, 0.9, 1)
-text = "收集到的线索"
-
-[node name="LooseCards" parent="BoardScroll/BoardContent" instance=ExtResource("1_free_drop")]
+mouse_filter = 2
+theme_override_styles/panel = SubResource("marquee")

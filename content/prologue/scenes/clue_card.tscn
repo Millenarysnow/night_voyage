@@ -1,9 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://content/prologue/scripts/ClueCardView.cs" id="1_script"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_clue"]
-bg_color = Color(0.125, 0.173, 0.22, 1)
+[sub_resource type="StyleBoxFlat" id="normal"]
+bg_color = Color(0.125, 0.173, 0.22, 0.98)
 border_color = Color(0.71, 0.541, 0.235, 1)
 border_width_left = 1
 border_width_top = 1
@@ -18,22 +18,144 @@ content_margin_top = 10.0
 content_margin_right = 12.0
 content_margin_bottom = 10.0
 
-[node name="ClueCard" type="PanelContainer"]
-custom_minimum_size = Vector2(270, 96)
-mouse_filter = 0
-theme_override_styles/panel = SubResource("StyleBoxFlat_clue")
-script = ExtResource("1_script")
+[sub_resource type="StyleBoxFlat" id="selected"]
+bg_color = Color(0.125, 0.173, 0.22, 0.98)
+border_color = Color(0.42, 0.75, 0.82, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
 
-[node name="Content" type="VBoxContainer" parent="."]
+[node name="ClueCard" type="Panel"]
+focus_mode = 2
+custom_minimum_size = Vector2(250, 150)
+mouse_filter = 1
+theme_override_styles/panel = SubResource("normal")
+script = ExtResource("1_script")
+SelectedStyle = SubResource("selected")
+MinimumScale = 0.4
+MaximumScale = 2.8
+RotationStepDegrees = 15.0
+
+[node name="Layout" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 10.0
+offset_right = -12.0
+offset_bottom = -10.0
+mouse_filter = 2
+theme_override_constants/separation = 7
+
+[node name="Header" type="HBoxContainer" parent="Layout"]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 4
+theme_override_constants/separation = 7
 
-[node name="Source" type="Label" parent="Content"]
+[node name="Kind" type="Label" parent="Layout/Header"]
+custom_minimum_size = Vector2(36, 24)
 layout_mode = 2
+theme_override_colors/font_color = Color(0.52, 0.79, 0.82, 1)
+theme_override_font_sizes/font_size = 11
+vertical_alignment = 1
+text = "摘录"
+
+[node name="Source" type="Label" parent="Layout/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.906, 0.741, 0.404, 1)
+theme_override_font_sizes/font_size = 12
+vertical_alignment = 1
+clip_text = true
+text = "线索来源"
 
-[node name="Text" type="Label" parent="Content"]
+[node name="Remove" type="Button" parent="Layout/Header"]
+custom_minimum_size = Vector2(24, 24)
 layout_mode = 2
+focus_mode = 0
+mouse_filter = 0
+tooltip_text = "从白板移除此线索"
+text = "×"
+
+[node name="Text" type="RichTextLabel" parent="Layout"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+mouse_filter = 0
+focus_mode = 2
+fit_content = true
+scroll_active = false
+selection_enabled = true
+theme_override_font_sizes/normal_font_size = 13
 autowrap_mode = 3
-max_lines_visible = 3
+text = "线索摘录"
+
+[node name="Image" type="TextureRect" parent="Layout"]
+custom_minimum_size = Vector2(226, 170)
+layout_mode = 2
+mouse_filter = 2
+visible = false
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Caption" type="RichTextLabel" parent="Layout"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+mouse_filter = 0
+focus_mode = 2
+fit_content = true
+scroll_active = false
+selection_enabled = true
+theme_override_colors/default_color = Color(0.72, 0.76, 0.8, 1)
+theme_override_font_sizes/normal_font_size = 11
+autowrap_mode = 3
+visible = false
+text = "图片说明"
+
+[node name="Note" type="TextEdit" parent="Layout"]
+custom_minimum_size = Vector2(0, 60)
+layout_mode = 2
+focus_mode = 2
+placeholder_text = "写下你的批注…"
+wrap_mode = 1
+scroll_fit_content_height = false
+
+[node name="RotateHandle" type="Button" parent="."]
+visible = false
+anchors_preset = 5
+anchor_top = 0.0
+anchor_bottom = 0.0
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -12.0
+offset_top = -26.0
+offset_right = 12.0
+offset_bottom = -2.0
+focus_mode = 0
+mouse_filter = 0
+tooltip_text = "旋转线索卡"
+text = "↻"
+
+[node name="ScaleHandle" type="Button" parent="."]
+visible = false
+anchors_preset = 12
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -18.0
+offset_top = -18.0
+offset_right = 6.0
+offset_bottom = 6.0
+focus_mode = 0
+mouse_filter = 0
+tooltip_text = "缩放线索卡"
+text = "↗"

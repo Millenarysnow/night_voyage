@@ -23,8 +23,6 @@ public partial class PrologueMain : Control
 	private const string BoardWindowScenePath = "res://content/prologue/scenes/board_window.tscn";
 	private const string WindowTaskbarButtonScenePath = "res://content/prologue/scenes/window_taskbar_button.tscn";
 	private const string ChatMessageScenePath = "res://content/prologue/scenes/chat_message.tscn";
-	private const string ClueCardScenePath = "res://content/prologue/scenes/clue_card.tscn";
-	private const string TaskDropZoneScenePath = "res://content/prologue/scenes/task_drop_zone.tscn";
 	private const string ToastScenePath = "res://content/prologue/scenes/toast.tscn";
 	private const string ImageLightboxScenePath = "res://content/prologue/scenes/image_lightbox.tscn";
 	private const string FatalErrorScenePath = "res://content/prologue/scenes/error_message.tscn";
@@ -58,6 +56,7 @@ public partial class PrologueMain : Control
 	private LineEdit? _chatInput;
 	private Control? _browserHost;
 	private Control? _browser;
+	private BoardView? _boardView;
 	private bool _browserCreated;
 	private bool _fallbackBrowser;
 	private bool _cefReady;
@@ -301,8 +300,12 @@ public partial class PrologueMain : Control
 		};
 		if (id == "board")
 		{
-			FreeDropZoneView? looseCards = frame.GetNodeOrNull<FreeDropZoneView>("Body/BoardContentRoot/BoardScroll/BoardContent/LooseCards");
-			if (looseCards != null) looseCards.ClueDropped += DetachClue;
+			_boardView = frame.GetNodeOrNull<BoardView>("Body/BoardContentRoot");
+			if (_boardView != null)
+			{
+				_boardView.ActionRequested += HandleBoardAction;
+				_boardView.ImagePreviewRequested += ShowBoardImagePreview;
+			}
 		}
 	}
 
@@ -400,7 +403,7 @@ public partial class PrologueMain : Control
 		}
 
 		if (id == "browser") CreateBrowser();
-		if (id == "board") RebuildBoard();
+		if (id == "board") _boardView?.Configure(_snapshot);
 		if (id == "chat") CallDeferred(MethodName.FocusChatInput);
 	}
 
@@ -648,7 +651,7 @@ public partial class PrologueMain : Control
 			_statusLabel.Text = complete ? "● 已完成" : "● 在线";
 			_statusLabel.Modulate = complete ? new Color("8dd9a8") : new Color("54b183");
 		}
-		RebuildBoard();
+		_boardView?.Configure(_snapshot);
 	}
 
 	/// <summary>当前找猫序幕固定在一晚内的十五点二十分。</summary>
@@ -667,7 +670,7 @@ public partial class PrologueMain : Control
 		if (_browser != null) SendSnapshotToBrowser();
 	}
 
-	/// <summary>打开场景化白板窗口并根据最新权威快照重建任务区。</summary>
+	/// <summary>打开场景化白板窗口并同步最新权威快照。</summary>
 	private void OpenBoard() => ShowWindow("board");
 
 	/// <summary>重置状态机、聊天展示和延迟对白，保留已经创建的 UI 场景。</summary>
@@ -719,87 +722,12 @@ public partial class PrologueMain : Control
 		if (_chatMessages?.GetParent() is ScrollContainer scroll) scroll.SetDeferred("scroll_vertical", int.MaxValue);
 	}
 
-	/// <summary>从 C++ 快照填充白板场景，并为每个任务和线索实例化对应可编辑模板。</summary>
-	private void RebuildBoard()
+	/// <summary>把白板语义动作提交给剧情状态机，不在协调器中实现任务判定。</summary>
+	private void HandleBoardAction(string action, Dictionary payload)
 	{
-		if (!_windows.TryGetValue("board", out WindowRecord? board) || !_snapshot.ContainsKey("quest")) return;
-		Control boardContent = board.Frame.GetNode<Control>("Body/BoardContentRoot");
-		VBoxContainer boardList = boardContent.GetNode<VBoxContainer>("BoardScroll/BoardContent");
-		VBoxContainer tasks = boardList.GetNode<VBoxContainer>("QuestTasks");
-		FreeDropZoneView loose = boardList.GetNode<FreeDropZoneView>("LooseCards");
-		ClearChildren(tasks);
-		ClearChildren(loose);
-
-		Dictionary quest = _snapshot["quest"].AsGodotDictionary();
-		boardList.GetNode<Label>("Heading").Text = "今晚要办的事 · " + Read(quest, "title", "找到年糕").AsString();
-		bool complete = Read(quest, "complete", false).AsBool();
-		boardList.GetNode<Label>("Finished").Visible = complete;
-		boardList.GetNode<Label>("ReadyMessage").Visible = !complete && Read(_snapshot, "quest_ready", false).AsBool();
-
-		if (!complete && quest.ContainsKey("tasks"))
-		{
-			foreach (Variant taskValue in quest["tasks"].AsGodotArray())
-			{
-				Dictionary task = taskValue.AsGodotDictionary();
-				string taskId = Read(task, "id", "").AsString();
-				PackedScene? taskScene = GD.Load<PackedScene>(TaskDropZoneScenePath);
-				if (taskScene?.Instantiate() is not TaskDropZoneView zone) continue;
-				zone.Configure(taskId, Read(task, "title", "").AsString(), Read(task, "done", false).AsBool());
-				zone.ClueDropped += AttachClue;
-				tasks.AddChild(zone);
-				if (!task.ContainsKey("clue_ids")) continue;
-
-				foreach (Variant clueId in task["clue_ids"].AsGodotArray())
-				{
-					ClueCardView? card = CreateClueCard(clueId.AsString());
-					if (card != null) zone.GetNode<VBoxContainer>("Layout/Cards").AddChild(card);
-				}
-			}
-		}
-
-		if (_snapshot.ContainsKey("clues"))
-		{
-			foreach (Variant clueValue in _snapshot["clues"].AsGodotArray())
-			{
-				Dictionary clue = clueValue.AsGodotDictionary();
-				if (Read(clue, "task_id", "").AsString().Length > 0) continue;
-				ClueCardView? card = InstantiateClueCard(clue);
-				if (card != null) loose.AddChild(card);
-			}
-		}
-	}
-
-	/// <summary>按稳定线索 ID 在当前快照中查找卡片并实例化模板。</summary>
-	private ClueCardView? CreateClueCard(string clueId)
-	{
-		if (!_snapshot.ContainsKey("clues")) return null;
-		foreach (Variant clueValue in _snapshot["clues"].AsGodotArray())
-		{
-			Dictionary clue = clueValue.AsGodotDictionary();
-			if (Read(clue, "id", "").AsString() == clueId) return InstantiateClueCard(clue);
-		}
-		return null;
-	}
-
-	/// <summary>以场景模板承载线索文字和拖放行为，UI 样式保存在 clue_card.tscn。</summary>
-	private static ClueCardView? InstantiateClueCard(Dictionary clue)
-	{
-		PackedScene? scene = GD.Load<PackedScene>(ClueCardScenePath);
-		if (scene?.Instantiate() is not ClueCardView card) return null;
-		card.Configure(clue);
-		return card;
-	}
-
-	/// <summary>将线索挂接动作提交给状态机。</summary>
-	private void AttachClue(string clueId, string taskId)
-	{
-		DispatchAction("attach_clue", new Dictionary { ["clue_id"] = clueId, ["task_id"] = taskId });
-	}
-
-	/// <summary>将线索拖回自由区的动作提交给状态机。</summary>
-	private void DetachClue(string clueId)
-	{
-		DispatchAction("detach_clue", new Dictionary { ["clue_id"] = clueId });
+		Dictionary result = DispatchAction(action, payload);
+		if (!Read(result, "ok", false).AsBool())
+			GD.PushError("白板操作被状态机拒绝：" + action + "，" + Read(result, "message", "状态机没有返回错误说明").AsString());
 	}
 
 	/// <summary>切换预置灯箱场景的图片纹理并显示模态层。</summary>
@@ -807,10 +735,23 @@ public partial class PrologueMain : Control
 	{
 		if (_imageOverlay == null) return;
 		_previewedImagePage = page == "forum_post" ? "forum_post" : "article";
-		string path = _previewedImagePage == "forum_post"
-			? "res://content/assets/prop_cat.png"
-			: "res://content/assets/prop_cat_home.png";
-		_imageOverlay.GetNode<TextureRect>("Card/Image").Texture = LoadTexture(path);
+		// 浏览器图片继续通过内容快照取得资源，不将具体关卡的图片路径写进界面逻辑。
+		Dictionary content = _snapshot["content"].AsGodotDictionary();
+		Dictionary source = content[_previewedImagePage == "forum_post" ? "forum" : "article"].AsGodotDictionary();
+		_imageOverlay.GetNode<TextureRect>("Card/Image").Texture = LoadTexture(source["image"].AsString());
+		_imageOverlay.GetNode<Label>("Card/Caption").Text = Read(source, "image_caption", "").AsString();
+		_imageOverlay.GetNode<Button>("Card/Collect").Visible = true;
+		_imageOverlay.Visible = true;
+		_imageOverlay.MoveToFront();
+	}
+
+	/// <summary>白板中已经收录的图片只打开原图，隐藏收录入口，避免再次提交网页收录动作。</summary>
+	private void ShowBoardImagePreview(string imagePath, string caption)
+	{
+		if (_imageOverlay == null) return;
+		_imageOverlay.GetNode<TextureRect>("Card/Image").Texture = LoadTexture(imagePath);
+		_imageOverlay.GetNode<Label>("Card/Caption").Text = caption;
+		_imageOverlay.GetNode<Button>("Card/Collect").Visible = false;
 		_imageOverlay.Visible = true;
 		_imageOverlay.MoveToFront();
 	}
@@ -890,13 +831,12 @@ public partial class PrologueMain : Control
 	/// <summary>供场景绑定脚本复用的快照字段读取入口。</summary>
 	internal static Variant Get(Dictionary dictionary, string key, Variant fallback) => Read(dictionary, key, fallback);
 
-	/// <summary>从项目 PNG 资源创建纹理，避免首次导入缓存尚未就绪时丢图。</summary>
+	/// <summary>读取 Godot 导入纹理，保留不同图片格式的资源管线；资源缺失时明确报错。</summary>
 	private static Texture2D? LoadTexture(string path)
 	{
-		byte[] bytes = FileAccess.GetFileAsBytes(path);
-		Image image = new();
-		if (image.LoadPngFromBuffer(bytes) != Error.Ok || image.IsEmpty()) return null;
-		return ImageTexture.CreateFromImage(image);
+		Texture2D? texture = GD.Load<Texture2D>(path);
+		if (texture == null) GD.PushError("无法加载图片资源：" + path);
+		return texture;
 	}
 
 	/// <summary>实例化错误提示场景并写入具体资源或初始化错误信息。</summary>

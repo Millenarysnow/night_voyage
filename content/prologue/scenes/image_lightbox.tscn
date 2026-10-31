@@ -68,6 +68,16 @@ theme_override_styles/normal = SubResource("StyleBoxFlat_primary")
 theme_override_styles/hover = SubResource("StyleBoxFlat_primary")
 text = "📌 收进白板"
 
+[node name="Caption" type="Label" parent="Card"]
+offset_left = 26.0
+offset_top = 468.0
+offset_right = 754.0
+offset_bottom = 494.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.72, 0.76, 0.8, 1)
+theme_override_font_sizes/font_size = 12
+clip_text = true
+
 [node name="Close" type="Button" parent="Card"]
 offset_left = 620.0
 offset_top = 500.0

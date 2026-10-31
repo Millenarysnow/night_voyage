@@ -3,6 +3,8 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <cmath>
+
 namespace godot {
 
 void NVPrologueState::_bind_methods() {
@@ -282,6 +284,12 @@ void NVPrologueState::reset() {
 	// 重开序章仅清除运行进度，内容配置由当前 JSON 资源继续复用。
 	const int64_t previous_revision = revision;
 	clues.clear();
+	board_view.clear();
+	board_view["pan_x"] = 0.0;
+	board_view["pan_y"] = 0.0;
+	board_view["zoom"] = 1.0;
+	board_view["rotation"] = 0.0;
+	board_view["auto_fit"] = true;
 	current_results.clear();
 	current_page = "home";
 	active_result_id = "";
@@ -327,7 +335,9 @@ Dictionary NVPrologueState::get_snapshot() const {
 	snapshot["search_query"] = last_search_query;
 	snapshot["search_results"] = current_results;
 	snapshot["pet"] = get_pet_profile();
-	snapshot["clues"] = clues;
+	// 快照是只读投影的独立副本，界面持有旧快照或编辑字典均不能改到权威状态。
+	snapshot["clues"] = clues.duplicate(true);
+	snapshot["board_view"] = board_view.duplicate(true);
 	snapshot["article_opened"] = article_opened;
 	snapshot["forum_post_opened"] = forum_post_opened;
 	snapshot["quest_ready"] = quest_ready;
@@ -385,6 +395,65 @@ Dictionary NVPrologueState::get_snapshot() const {
 	// 页面只读这份内容投影，不允许通过页面字段反向改写游戏进度。
 	snapshot["content"] = content;
 	return snapshot;
+}
+
+bool NVPrologueState::apply_clue_layout(Dictionary &clue, const Dictionary &payload, bool &changed) const {
+	// Godot Dictionary 默认共享底层数据；先在独立副本中验证，整次请求合法后才替换。
+	// 否则先收到合法坐标、后收到非法缩放时，会出现“返回失败却已经改了坐标”的半提交。
+	Dictionary candidate = clue.duplicate(true);
+	bool has_layout = false;
+	// 坐标必须成对提交，避免卡片在一次状态变更后丢失一个轴的位置。
+	const bool has_x = payload.has("x");
+	const bool has_y = payload.has("y");
+	if (has_x != has_y) {
+		return false;
+	}
+	if (has_x) {
+		const Variant x_value = payload.get("x", Variant());
+		const Variant y_value = payload.get("y", Variant());
+		if ((x_value.get_type() != Variant::FLOAT && x_value.get_type() != Variant::INT) ||
+				(y_value.get_type() != Variant::FLOAT && y_value.get_type() != Variant::INT)) {
+			return false;
+		}
+		const double x = x_value.get_type() == Variant::FLOAT ? static_cast<double>(x_value) : static_cast<int64_t>(x_value);
+		const double y = y_value.get_type() == Variant::FLOAT ? static_cast<double>(y_value) : static_cast<int64_t>(y_value);
+		if (!std::isfinite(x) || !std::isfinite(y)) {
+			return false;
+		}
+		candidate["x"] = x;
+		candidate["y"] = y;
+		has_layout = true;
+	}
+
+	for (const String &key : { String("scale"), String("rotation") }) {
+		if (!payload.has(key)) {
+			continue;
+		}
+		const Variant value = payload.get(key, Variant());
+		if (value.get_type() != Variant::FLOAT && value.get_type() != Variant::INT) {
+			return false;
+		}
+		const double number = value.get_type() == Variant::FLOAT ? static_cast<double>(value) : static_cast<int64_t>(value);
+		if (!std::isfinite(number) ||
+				(key == "scale" && (number < 0.4 || number > 2.8)) ||
+				(key == "rotation" && (number < -180.0 || number > 180.0))) {
+			return false;
+		}
+		candidate[key] = number;
+		has_layout = true;
+	}
+	if (payload.has("note")) {
+		const Variant note_value = payload.get("note", Variant());
+		if (note_value.get_type() != Variant::STRING) {
+			return false;
+		}
+		candidate["note"] = String(note_value);
+		has_layout = true;
+	}
+	if (!has_layout) return false;
+	clue = candidate;
+	changed = true;
+	return true;
 }
 
 Dictionary NVPrologueState::dispatch_action(const String &action, const Dictionary &payload) {
@@ -575,14 +644,21 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 				clue["page"] = page_id;
 				clue["text"] = kind == "text" ? selected_text : "";
 				clue["task_id"] = "";
+				clue["x"] = Variant();
+				clue["y"] = Variant();
+				clue["scale"] = 1.0;
+				clue["rotation"] = 0.0;
+				clue["note"] = "";
 				if (page_id == "article") {
 					const Dictionary article = get_section("article");
 					clue["source"] = article.get("short_source", "寻猫启事");
 					clue["image"] = kind == "image" ? article.get("image", "") : "";
+					clue["caption"] = kind == "image" ? article.get("image_caption", "") : "";
 				} else {
 					const Dictionary forum = get_section("forum");
 					clue["source"] = forum.get("short_source", "暗涌论坛");
 					clue["image"] = kind == "image" ? forum.get("image", "") : "";
+					clue["caption"] = kind == "image" ? forum.get("image_caption", "") : "";
 				}
 				clues.push_back(clue);
 				append_post_collection_dialogue(say);
@@ -601,11 +677,24 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			message = "这张卡片或任务当前不存在。";
 		} else {
 			Dictionary clue = clues[clue_index];
+			bool layout_changed = false;
+			if ((payload.has("scale") || payload.has("rotation")) &&
+					!apply_clue_layout(clue, payload, layout_changed)) {
+				code = "invalid_clue_layout";
+				message = "线索卡片变换数据无效。";
+				return make_result(false, code, message, say);
+			}
 			if (String(clue.get("task_id", "")) != task_id) {
 				clue["task_id"] = task_id;
-				clues[clue_index] = clue;
+				clue["x"] = Variant();
+				clue["y"] = Variant();
 				changed = true;
 			}
+			if (layout_changed || changed) {
+				clues[clue_index] = clue;
+			}
+			// 同一任务内重新松开也要求 UI 按任务树布局重新吸附卡片。
+			changed = true;
 			const bool was_ready = quest_ready;
 			evaluate_quest_tasks();
 			if (!was_ready && quest_ready && !say.is_empty()) {
@@ -631,14 +720,107 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			message = "白板上没有这张卡片。";
 		} else {
 			Dictionary clue = clues[clue_index];
+			bool layout_changed = false;
+			if ((payload.has("x") || payload.has("y") || payload.has("scale") ||
+					payload.has("rotation") || payload.has("note")) &&
+					!apply_clue_layout(clue, payload, layout_changed)) {
+				code = "invalid_clue_layout";
+				message = "线索卡片布局数据无效。";
+				return make_result(false, code, message, say);
+			}
 			if (!String(clue.get("task_id", "")).is_empty()) {
 				clue["task_id"] = "";
-				clues[clue_index] = clue;
 				changed = true;
+			}
+			changed = changed || layout_changed;
+			if (layout_changed || changed) {
+				clues[clue_index] = clue;
 			}
 			success = true;
 			code = "clue_detached";
 			message = "线索已放回白板自由区。";
+		}
+	} else if (action == "update_clue") {
+		const String clue_id = String(payload.get("clue_id", ""));
+		const int clue_index = find_clue_index(clue_id);
+		if (clue_index < 0) {
+			code = "unknown_clue";
+			message = "白板上没有这张卡片。";
+		} else {
+			Dictionary clue = clues[clue_index];
+			if (!apply_clue_layout(clue, payload, changed)) {
+				code = "invalid_clue_layout";
+				message = "线索卡片布局数据无效或没有可保存的字段。";
+			} else {
+				clues[clue_index] = clue;
+				success = true;
+				code = "clue_updated";
+				message = "白板线索卡已更新。";
+			}
+		}
+	} else if (action == "remove_clue") {
+		const String clue_id = String(payload.get("clue_id", ""));
+		const int clue_index = find_clue_index(clue_id);
+		if (clue_index < 0) {
+			code = "unknown_clue";
+			message = "白板上没有这张卡片。";
+		} else {
+			clues.remove_at(clue_index);
+			evaluate_quest_tasks();
+			success = true;
+			changed = true;
+			code = "clue_removed";
+			message = "线索卡已从白板撕下。";
+		}
+	} else if (action == "tidy_board") {
+		// 整理只重置摆放与单卡变换，保留线索内容、批注、任务归属和已经答对的里程碑。
+		for (int64_t index = 0; index < clues.size(); ++index) {
+			Dictionary clue = Dictionary(clues[index]).duplicate(true);
+			clue["x"] = Variant();
+			clue["y"] = Variant();
+			clue["scale"] = 1.0;
+			clue["rotation"] = 0.0;
+			clues[index] = clue;
+		}
+		board_view["auto_fit"] = true;
+		success = true;
+		changed = true;
+		code = "board_tidied";
+		message = "白板卡片已重新整理。";
+	} else if (action == "set_board_view") {
+		const Variant pan_x_value = payload.get("pan_x", Variant());
+		const Variant pan_y_value = payload.get("pan_y", Variant());
+		const Variant zoom_value = payload.get("zoom", Variant());
+		const Variant rotation_value = payload.get("rotation", Variant());
+		const Variant auto_fit_value = payload.get("auto_fit", Variant());
+		const bool numeric_values =
+				(pan_x_value.get_type() == Variant::FLOAT || pan_x_value.get_type() == Variant::INT) &&
+				(pan_y_value.get_type() == Variant::FLOAT || pan_y_value.get_type() == Variant::INT) &&
+				(zoom_value.get_type() == Variant::FLOAT || zoom_value.get_type() == Variant::INT) &&
+				(rotation_value.get_type() == Variant::FLOAT || rotation_value.get_type() == Variant::INT);
+		const bool auto_fit_valid = auto_fit_value.get_type() == Variant::BOOL;
+		if (!numeric_values || !auto_fit_valid) {
+			code = "invalid_board_view";
+			message = "白板镜头状态字段不完整。";
+		} else {
+			const double pan_x = pan_x_value.get_type() == Variant::FLOAT ? static_cast<double>(pan_x_value) : static_cast<int64_t>(pan_x_value);
+			const double pan_y = pan_y_value.get_type() == Variant::FLOAT ? static_cast<double>(pan_y_value) : static_cast<int64_t>(pan_y_value);
+			const double zoom = zoom_value.get_type() == Variant::FLOAT ? static_cast<double>(zoom_value) : static_cast<int64_t>(zoom_value);
+			const double rotation = rotation_value.get_type() == Variant::FLOAT ? static_cast<double>(rotation_value) : static_cast<int64_t>(rotation_value);
+			if (!std::isfinite(pan_x) || !std::isfinite(pan_y) || !std::isfinite(zoom) || zoom <= 0.0 || !std::isfinite(rotation)) {
+				code = "invalid_board_view";
+				message = "白板镜头数值超出有效范围。";
+			} else {
+				board_view["pan_x"] = pan_x;
+				board_view["pan_y"] = pan_y;
+				board_view["zoom"] = zoom;
+				board_view["rotation"] = rotation;
+				board_view["auto_fit"] = bool(auto_fit_value);
+				success = true;
+				changed = true;
+				code = "board_view_updated";
+				message = "白板视角已保存。";
+			}
 		}
 	} else if (action == "chat") {
 		const String text = String(payload.get("text", "")).strip_edges();
@@ -740,8 +922,13 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 					continue;
 				}
 				Dictionary clue = clues[clue_index];
-				clue["task_id"] = "";
-				clues[clue_index] = clue;
+				// 已在自由区摆好的卡片继续留在原位，只散开原先挂在子任务下的卡片。
+				if (!String(clue.get("task_id", "")).is_empty()) {
+					clue["task_id"] = "";
+					clue["x"] = Variant();
+					clue["y"] = Variant();
+					clues[clue_index] = clue;
+				}
 			}
 		} else if (complete) {
 			success = true;

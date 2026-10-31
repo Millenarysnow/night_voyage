@@ -34,6 +34,8 @@ private:
 	Dictionary content;
 	/** 由玩家亲手收录的文字/图片线索；每项都保存来源和当前白板挂接位置。 */
 	Array clues;
+	/** 玩家调整后的白板镜头状态，供关闭窗口或重建界面后继续使用。 */
+	Dictionary board_view;
 	/** 最近一次搜索结果，作为打开页面的前置条件。 */
 	Array current_results;
 	/** 当前 CEF 页面标识，用于拒绝来自非当前页面的收录请求。 */
@@ -85,6 +87,8 @@ private:
 	Dictionary find_task(const String &task_id) const;
 	/** 按线索 ID 查找白板卡片；未找到时返回 -1。 */
 	int find_clue_index(const String &clue_id) const;
+	/** 验证卡片坐标、缩放、旋转和批注，整项合法后原子替换线索记录。 */
+	bool apply_clue_layout(Dictionary &clue, const Dictionary &payload, bool &changed) const;
 	/** 检查指定页面是否已有指定类型的玩家收录记录。 */
 	bool has_page_clue(const String &page_id, const String &kind) const;
 	/** 检查网页结果数组中是否含有指定结果 ID。 */

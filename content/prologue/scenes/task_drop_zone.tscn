@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=4 format=3]
 
 [ext_resource type="Script" path="res://content/prologue/scripts/TaskDropZoneView.cs" id="1_script"]
 
@@ -18,22 +18,39 @@ content_margin_top = 10.0
 content_margin_right = 12.0
 content_margin_bottom = 10.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_task_highlight"]
+bg_color = Color(0.12, 0.196, 0.22, 1)
+border_color = Color(0.42, 0.75, 0.82, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
 [node name="TaskDropZone" type="PanelContainer"]
-custom_minimum_size = Vector2(850, 112)
-mouse_filter = 0
+custom_minimum_size = Vector2(298, 58)
+mouse_filter = 1
 theme_override_styles/panel = SubResource("StyleBoxFlat_task")
 script = ExtResource("1_script")
+HighlightStyle = SubResource("StyleBoxFlat_task_highlight")
 
 [node name="Layout" type="VBoxContainer" parent="."]
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 8
+theme_override_constants/separation = 0
 
-[node name="Title" type="Label" parent="Layout"]
-layout_mode = 2
-theme_override_colors/font_color = Color(0.941, 0.776, 0.427, 1)
-
-[node name="Cards" type="VBoxContainer" parent="Layout"]
+[node name="Title" type="RichTextLabel" parent="Layout"]
+custom_minimum_size = Vector2(0, 30)
 layout_mode = 2
 mouse_filter = 2
-theme_override_constants/separation = 8
+fit_content = true
+scroll_active = false
+theme_override_colors/default_color = Color(0.941, 0.776, 0.427, 1)
+theme_override_font_sizes/normal_font_size = 13
