@@ -25,14 +25,16 @@ public partial class DesktopUiRegressionTest : Node
 		{
 			_main = GD.Load<PackedScene>("res://main.tscn").Instantiate<PrologueMain>();
 			AddChild(_main);
-			_main.GetNode<Control>("LockScreen").Hide();
+			// 走真实解锁路径，验证登录遮罩释放后窗口标题栏仍能收到拖动输入。
+			_main.GetNode<LineEdit>("LockScreen/LoginCard/LoginName").Text = "验收玩家";
+			_main.Call("UnlockDesktop");
+			await Delay(0.8);
 			_desktop = _main.GetNode<Control>("PrologueDesktop/CRTViewport/ContentViewport/Content/DesktopContent");
 			_contentViewport = _desktop.GetViewport() as SubViewport ?? throw new InvalidOperationException("桌面没有使用预期的子视口。");
 			Panel chat = Window("chat");
 			Panel board = Window("board");
 			_canvas = board.GetNode<BoardCanvasView>("Body/BoardContentRoot/BoardCanvas");
-			_main.Call("ShowWindow", "chat");
-			_main.Call("DispatchAction", "begin", new Dictionary());
+			// 解锁流程已经打开暗线并启动对白，后续只等待真实队列完成。
 			await Delay(2.5);
 			ValidateChatRows();
 
@@ -44,6 +46,9 @@ public partial class DesktopUiRegressionTest : Node
 			// 点击白板外露出的暗线标题栏，再在两窗口重叠的消息区拖动与滚轮。
 			await Click(new Vector2(260, 52));
 			Expect(chat.GetIndex() > board.GetIndex(), "暗线聚焦后节点顺序与视觉层级保持一致。");
+			Vector2 chatPosition = chat.Position;
+			await Drag(new Vector2(260, 52), new Vector2(292, 70));
+			Expect(chat.Position.DistanceTo(chatPosition) > 10.0f, "暗线标题栏可以拖动窗口。");
 			Vector2 origin = _canvas.WorldToScreen(Vector2.Zero);
 			float zoom = _canvas.Zoom;
 			Vector2 overlap = new(260, 480);

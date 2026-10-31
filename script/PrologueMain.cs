@@ -106,7 +106,11 @@ public partial class PrologueMain : Control
 	public override void _Input(InputEvent @event)
 	{
 		// 根视口仍会先收到全局输入；模态层打开时不能顺便聚焦或拖动后面的应用窗口。
-		if (_lockOverlay?.IsVisibleInTree() == true || _imageOverlay?.IsVisibleInTree() == true)
+		// 淡出动画结束后遮罩会被 QueueFree；先确认托管引用仍对应有效节点，
+		// 避免已释放的 Godot 对象在输入帧中抛异常并截断窗口拖动逻辑。
+		bool lockOverlayVisible = _lockOverlay != null && GodotObject.IsInstanceValid(_lockOverlay) && _lockOverlay.IsVisibleInTree();
+		bool imageOverlayVisible = _imageOverlay != null && GodotObject.IsInstanceValid(_imageOverlay) && _imageOverlay.IsVisibleInTree();
+		if (lockOverlayVisible || imageOverlayVisible)
 		{
 			_draggingWindow = null;
 			return;
@@ -823,10 +827,16 @@ public partial class PrologueMain : Control
 	private void FadeOutLockScreen()
 	{
 		if (_lockOverlay == null) return;
+		Control overlay = _lockOverlay;
 		Tween tween = CreateTween();
-		tween.TweenProperty(_lockOverlay, "modulate:a", 0.0f, 0.55f)
+		tween.TweenProperty(overlay, "modulate:a", 0.0f, 0.55f)
 			.SetTrans(Tween.TransitionType.Cubic).SetEase(Tween.EaseType.Out);
-		tween.TweenCallback(Callable.From(() => _lockOverlay?.QueueFree()));
+		tween.TweenCallback(Callable.From(() =>
+		{
+			// 清空字段与释放节点保持同一回调，输入阶段不会再访问悬空引用。
+			if (_lockOverlay == overlay) _lockOverlay = null;
+			if (GodotObject.IsInstanceValid(overlay)) overlay.QueueFree();
+		}));
 	}
 
 	/// <summary>清空容器中的运行时场景实例；每个新元素仍通过 PackedScene 创建。</summary>
