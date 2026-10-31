@@ -483,11 +483,19 @@ public partial class PrologueMain : Control
 		return result;
 	}
 
-	/// <summary>保持窗口标题栏始终可见，并避免窗口覆盖 CRT 任务栏。</summary>
-	private static Vector2 ClampWindowPosition(Control window, Vector2 position)
+	/// <summary>从当前视口和任务栏场景读取窗口可拖动范围，避免把设计分辨率写进逻辑。</summary>
+	private Vector2 ClampWindowPosition(Control window, Vector2 position)
 	{
-		return new Vector2(Mathf.Clamp(position.X, -window.Size.X + 90, 1280 - 90),
-			Mathf.Clamp(position.Y, 0, 720 - 46 - 40));
+		Vector2 viewportSize = GetViewportRect().Size;
+		float taskbarTop = viewportSize.Y;
+		if (_desktopContent?.GetNodeOrNull<Control>("Taskbar") is Control taskbar)
+		{
+			taskbarTop = taskbar.GetGlobalRect().Position.Y;
+		}
+
+		return new Vector2(
+			Mathf.Clamp(position.X, -window.Size.X + 90, viewportSize.X - 90),
+			Mathf.Clamp(position.Y, 0, taskbarTop - 40));
 	}
 
 	/// <summary>创建 CEF 扩展原生控件并挂入浏览器场景预留的 BrowserHost 插槽。</summary>
