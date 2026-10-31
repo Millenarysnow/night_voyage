@@ -144,18 +144,20 @@ public partial class BoardInteractionIntegrationTest : Node
 			Expect(previewCount == 1 && image.Position.DistanceTo(imagePosition + new Vector2(25, 12)) < 0.1f,
 				"拖动图片本身移动整张卡片，松手不会误开预览。");
 
-			// 抓题头时把卡片中心放进任务行，鼠标自身刻意落在投放区外。
+			// 抓题头时把鼠标放进任务行，卡片中心因抓取偏移落在投放区外。
 			TaskDropZoneView task = _canvas.GetNode<TaskDropZoneView>("BoardWorld/TaskLayer/cat_look");
 			Vector2 targetCenter = task.BoardDropBounds.GetCenter();
 			Vector2 cardCenterWorld = card.Position + card.PivotOffset;
 			start = Point(card.GetNode<Control>("Layout/Header/Kind"));
-			Vector2 destination = start +
-				(_canvas.WorldToScreen(targetCenter) - _canvas.WorldToScreen(cardCenterWorld));
-			Expect(!task.BoardDropBounds.HasPoint(_canvas.ScreenToWorld(_canvas.ToCanvasLocal(destination))),
-				"投放验收使用鼠标在外、卡片中心在任务内的场景。");
+			Vector2 destination = _canvas.GetGlobalTransformWithCanvas() * _canvas.WorldToScreen(targetCenter);
+			Vector2 pointerWorld = _canvas.ScreenToWorld(_canvas.ToCanvasLocal(destination));
+			Vector2 startWorld = _canvas.ScreenToWorld(_canvas.ToCanvasLocal(start));
+			Vector2 expectedCenter = targetCenter + (cardCenterWorld - startWorld);
+			Expect(task.BoardDropBounds.HasPoint(pointerWorld) && !task.BoardDropBounds.HasPoint(expectedCenter),
+				"投放验收使用鼠标在任务区内、卡片中心在任务区外的场景。");
 			await Drag(start, destination);
 			Expect(Clue("clue_1")["task_id"].AsString() == "cat_look",
-				"任务挂接根据卡片中心命中，并由 C++ 完成子任务判定。");
+				"任务挂接根据鼠标释放点命中，并由 C++ 完成子任务判定。");
 
 			_canvas.FitContent();
 			await Frames();

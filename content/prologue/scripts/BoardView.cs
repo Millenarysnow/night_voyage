@@ -393,8 +393,10 @@ public partial class BoardView : Control
 		float cardScale, float cardRotation)
 	{
 		if (_canvas == null || !_cards.ContainsKey(clueId)) return;
-		// 原型按卡片中心投放；抓着题头拖动时，鼠标位置和卡片中心通常相差半张卡。
-		string targetTask = FindTaskAt(worldPosition + _cards[clueId].PivotOffset);
+		// 投放点定义为松手时的鼠标位置。拖住题头、图片或卡片边缘时，
+		// 鼠标与卡片中心本来就不重合，使用中心会让玩家无法把卡片精确放到树枝上。
+		Vector2 dropPoint = ScreenToBoardWorld(screenPosition);
+		string targetTask = FindTaskAt(dropPoint);
 		string currentTask = PrologueMain.Get(_clueData[clueId], "task_id", "").AsString();
 		if (targetTask.Length > 0)
 		{
@@ -467,12 +469,18 @@ public partial class BoardView : Control
 	private void UpdateDropHighlight(string clueId, Vector2 screenPosition)
 	{
 		if (_canvas == null) return;
-		ClueCardView card = _cards[clueId];
-		string target = FindTaskAt(card.Position + card.PivotOffset);
+		// 高亮与松手判定必须共用同一个鼠标世界坐标，否则视觉提示与实际结果会相反。
+		string target = FindTaskAt(ScreenToBoardWorld(screenPosition));
 		foreach ((string taskId, TaskDropZoneView zone) in _tasks)
 		{
 			zone.SetDropHighlighted(taskId == target);
 		}
+	}
+
+	/// <summary>把视口屏幕坐标转换为 BoardWorld 坐标，统一处理窗口、整板缩放和旋转。</summary>
+	private Vector2 ScreenToBoardWorld(Vector2 screenPosition)
+	{
+		return _canvas!.ScreenToWorld(_canvas.ToCanvasLocal(screenPosition));
 	}
 
 	/// <summary>提交卡片批注；C++ 状态更新后会把文字写回同一张场景卡。</summary>
