@@ -1,0 +1,10 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/window_chrome.tscn" id="1_chrome"]
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/board_window_content.tscn" id="2_content"]
+
+[node name="BoardWindow" instance=ExtResource("1_chrome")]
+position = Vector2(148, 86)
+size = Vector2(920, 630)
+
+[node name="BoardContentRoot" parent="Body" instance=ExtResource("2_content")]

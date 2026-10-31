@@ -1,0 +1,181 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Texture2D" path="res://content/assets/desktop_bg.png" id="1_wallpaper"]
+[ext_resource type="Shader" path="res://content/prologue/shaders/lock_shade.gdshader" id="2_shade"]
+[ext_resource type="Shader" path="res://content/prologue/shaders/lock_glass.gdshader" id="3_glass"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_shade"]
+shader = ExtResource("2_shade")
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_glass"]
+shader = ExtResource("3_glass")
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+bg_color = Color(0.055, 0.071, 0.098, 0.82)
+border_color = Color(0.165, 0.196, 0.259, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_logo"]
+bg_color = Color(0.851, 0.643, 0.255, 1)
+border_color = Color(0.851, 0.643, 0.255, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 14
+corner_radius_bottom_left = 14
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_input"]
+bg_color = Color(0.039, 0.051, 0.071, 1)
+border_color = Color(0.165, 0.196, 0.259, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 9
+corner_radius_top_right = 9
+corner_radius_bottom_right = 9
+corner_radius_bottom_left = 9
+content_margin_left = 12.0
+content_margin_right = 12.0
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary"]
+bg_color = Color(0.851, 0.643, 0.255, 1)
+border_color = Color(0.851, 0.643, 0.255, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="LockScreen" type="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 3000
+mouse_filter = 0
+
+[node name="LockWallpaper" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("1_wallpaper")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="LockShade" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("ShaderMaterial_shade")
+
+[node name="Time" type="Label" parent="."]
+offset_top = 170.0
+offset_right = 1280.0
+offset_bottom = 234.0
+theme_override_font_sizes/font_size = 54
+horizontal_alignment = 1
+text = "15:20"
+
+[node name="Date" type="Label" parent="."]
+offset_top = 240.0
+offset_right = 1280.0
+offset_bottom = 264.0
+theme_override_colors/font_color = Color(0.58, 0.62, 0.69, 1)
+horizontal_alignment = 1
+text = "10月16日 星期五 · 夜航 OS 3.1"
+
+[node name="LoginCard" type="Panel" parent="."]
+offset_left = 490.0
+offset_top = 292.0
+offset_right = 790.0
+offset_bottom = 518.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="Logo" type="Panel" parent="LoginCard"]
+offset_left = 124.0
+offset_top = 20.0
+offset_right = 176.0
+offset_bottom = 72.0
+theme_override_styles/panel = SubResource("StyleBoxFlat_logo")
+
+[node name="LogoText" type="Label" parent="LoginCard/Logo"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_colors/font_color = Color(0.09, 0.071, 0.031, 1)
+theme_override_font_sizes/font_size = 26
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "夜"
+
+[node name="LoginName" type="LineEdit" parent="LoginCard"]
+offset_left = 26.0
+offset_top = 88.0
+offset_right = 274.0
+offset_bottom = 130.0
+placeholder_text = "输入你的名字"
+max_length = 12
+alignment = 1
+theme_override_colors/font_color = Color(0.914, 0.925, 0.949, 1)
+theme_override_colors/font_placeholder_color = Color(0.4, 0.435, 0.502, 1)
+theme_override_colors/caret_color = Color(0.851, 0.643, 0.255, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_input")
+theme_override_styles/focus = SubResource("StyleBoxFlat_input")
+
+[node name="UnlockButton" type="Button" parent="LoginCard"]
+offset_left = 26.0
+offset_top = 142.0
+offset_right = 274.0
+offset_bottom = 184.0
+text = "解锁进入"
+theme_override_colors/font_color = Color(0.09, 0.071, 0.031, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_primary")
+theme_override_styles/hover = SubResource("StyleBoxFlat_primary")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_primary")
+
+[node name="LoginError" type="Label" parent="LoginCard"]
+visible = false
+offset_left = 16.0
+offset_top = 190.0
+offset_right = 284.0
+offset_bottom = 220.0
+theme_override_colors/font_color = Color(0.878, 0.376, 0.361, 1)
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "总得有个名字，这台电脑才认得你。"
+
+[node name="Welcome" type="Label" parent="."]
+visible = false
+offset_top = 536.0
+offset_right = 1280.0
+offset_bottom = 564.0
+theme_override_colors/font_color = Color(0.84, 0.86, 0.9, 1)
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="LockGlassOverlay" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("ShaderMaterial_glass")

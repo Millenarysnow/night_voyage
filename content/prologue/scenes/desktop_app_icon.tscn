@@ -1,0 +1,74 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://content/prologue/scripts/DesktopAppIconView.cs" id="1_script"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_normal"]
+bg_color = Color(0, 0, 0, 0)
+border_color = Color(0, 0, 0, 0)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_hover"]
+bg_color = Color(0.47, 0.59, 0.78, 0.14)
+border_color = Color(0.59, 0.71, 0.86, 0.22)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_glyph"]
+bg_color = Color(1, 1, 1, 1)
+border_color = Color(1, 1, 1, 0.1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 13
+corner_radius_top_right = 13
+corner_radius_bottom_right = 13
+corner_radius_bottom_left = 13
+shadow_color = Color(0, 0, 0, 0.5)
+shadow_size = 10
+shadow_offset = Vector2(0, 5)
+
+[node name="AppIcon" type="Button"]
+custom_minimum_size = Vector2(96, 86)
+layout_mode = 2
+focus_mode = 0
+mouse_default_cursor_shape = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_normal")
+theme_override_styles/hover = SubResource("StyleBoxFlat_hover")
+script = ExtResource("1_script")
+icon_color = Color(0.145, 0.294, 0.384, 1)
+
+[node name="Glyph" type="Panel" parent="."]
+layout_mode = 0
+offset_left = 23.0
+offset_top = 0.0
+offset_right = 73.0
+offset_bottom = 50.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_glyph")
+
+[node name="GlyphText" type="Label" parent="Glyph"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+theme_override_font_sizes/font_size = 24
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="."]
+layout_mode = 0
+offset_top = 56.0
+offset_right = 96.0
+offset_bottom = 76.0
+theme_override_colors/font_color = Color(0.89, 0.91, 0.94, 1)
+theme_override_font_sizes/font_size = 12
+horizontal_alignment = 1
+vertical_alignment = 1
+mouse_filter = 2

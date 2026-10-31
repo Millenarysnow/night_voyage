@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_toast"]
+bg_color = Color(0.086, 0.106, 0.145, 0.96)
+border_color = Color(0.165, 0.196, 0.259, 1)
+border_width_left = 3
+corner_radius_top_left = 9
+corner_radius_top_right = 9
+corner_radius_bottom_right = 9
+corner_radius_bottom_left = 9
+content_margin_left = 12.0
+content_margin_top = 8.0
+content_margin_right = 12.0
+content_margin_bottom = 8.0
+
+[node name="Toast" type="Panel"]
+custom_minimum_size = Vector2(290, 78)
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_toast")
+
+[node name="Content" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Title" type="Label" parent="Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.851, 0.643, 0.255, 1)
+
+[node name="Message" type="Label" parent="Content"]
+custom_minimum_size = Vector2(260, 38)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.62, 0.69, 1)
+autowrap_mode = 3
+max_lines_visible = 2

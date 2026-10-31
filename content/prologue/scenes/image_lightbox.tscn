@@ -1,0 +1,78 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_backdrop"]
+bg_color = Color(0.012, 0.02, 0.035, 0.875)
+border_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+bg_color = Color(0.067, 0.098, 0.137, 0.99)
+border_color = Color(0.851, 0.643, 0.255, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary"]
+bg_color = Color(0.851, 0.643, 0.255, 1)
+border_color = Color(0.851, 0.643, 0.255, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_secondary"]
+bg_color = Color(0.086, 0.106, 0.145, 1)
+border_color = Color(0.165, 0.196, 0.259, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="ImageLightbox" type="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+z_index = 3000
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_backdrop")
+
+[node name="Card" type="Panel" parent="."]
+offset_left = 250.0
+offset_top = 70.0
+offset_right = 1030.0
+offset_bottom = 650.0
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="Image" type="TextureRect" parent="Card"]
+offset_left = 26.0
+offset_top = 24.0
+offset_right = 754.0
+offset_bottom = 464.0
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Collect" type="Button" parent="Card"]
+offset_left = 470.0
+offset_top = 500.0
+offset_right = 605.0
+offset_bottom = 542.0
+theme_override_colors/font_color = Color(0.09, 0.071, 0.031, 1)
+theme_override_styles/normal = SubResource("StyleBoxFlat_primary")
+theme_override_styles/hover = SubResource("StyleBoxFlat_primary")
+text = "📌 收进白板"
+
+[node name="Close" type="Button" parent="Card"]
+offset_left = 620.0
+offset_top = 500.0
+offset_right = 730.0
+offset_bottom = 542.0
+theme_override_styles/normal = SubResource("StyleBoxFlat_secondary")
+theme_override_styles/hover = SubResource("StyleBoxFlat_secondary")
+text = "关闭"

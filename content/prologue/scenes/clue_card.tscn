@@ -1,0 +1,39 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://content/prologue/scripts/ClueCardView.cs" id="1_script"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_clue"]
+bg_color = Color(0.125, 0.173, 0.22, 1)
+border_color = Color(0.71, 0.541, 0.235, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+content_margin_left = 12.0
+content_margin_top = 10.0
+content_margin_right = 12.0
+content_margin_bottom = 10.0
+
+[node name="ClueCard" type="PanelContainer"]
+custom_minimum_size = Vector2(270, 96)
+mouse_filter = 0
+theme_override_styles/panel = SubResource("StyleBoxFlat_clue")
+script = ExtResource("1_script")
+
+[node name="Content" type="VBoxContainer" parent="."]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 4
+
+[node name="Source" type="Label" parent="Content"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.906, 0.741, 0.404, 1)
+
+[node name="Text" type="Label" parent="Content"]
+layout_mode = 2
+autowrap_mode = 3
+max_lines_visible = 3

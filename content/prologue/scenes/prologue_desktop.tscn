@@ -1,0 +1,43 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://addons/night_voyageExt/components/screen_effect_viewport.tscn" id="1_crt"]
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/desktop_content.tscn" id="2_content"]
+
+[node name="PrologueDesktop" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CRTBackplate" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.0235, 0.0314, 0.0471, 1)
+
+[node name="CRTViewport" parent="." instance=ExtResource("1_crt")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+stretch = false
+
+[node name="ContentViewport" parent="CRTViewport" index="0"]
+size = Vector2i(1280, 720)
+
+[node name="DesktopContent" parent="CRTViewport/ContentViewport/Content" instance=ExtResource("2_content")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[editable path="CRTViewport"]

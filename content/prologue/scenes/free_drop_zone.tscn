@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://content/prologue/scripts/FreeDropZoneView.cs" id="1_script"]
+
+[node name="FreeDropZone" type="FlowContainer"]
+custom_minimum_size = Vector2(850, 205)
+size_flags_vertical = 3
+mouse_filter = 0
+theme_override_constants/h_separation = 12
+theme_override_constants/v_separation = 12
+script = ExtResource("1_script")

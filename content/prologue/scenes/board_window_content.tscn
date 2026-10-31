@@ -1,0 +1,51 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/free_drop_zone.tscn" id="1_free_drop"]
+
+[node name="BoardContentRoot" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="BoardScroll" type="ScrollContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = -12.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_scroll_mode = 0
+
+[node name="BoardContent" type="VBoxContainer" parent="BoardScroll"]
+custom_minimum_size = Vector2(870, 520)
+theme_override_constants/separation = 12
+
+[node name="Heading" type="Label" parent="BoardScroll/BoardContent"]
+theme_override_colors/font_color = Color(0.941, 0.776, 0.427, 1)
+theme_override_font_sizes/font_size = 18
+text = "今晚要办的事 · 找到年糕"
+
+[node name="QuestTasks" type="VBoxContainer" parent="BoardScroll/BoardContent"]
+theme_override_constants/separation = 12
+
+[node name="Finished" type="Label" parent="BoardScroll/BoardContent"]
+visible = false
+theme_override_colors/font_color = Color(0.553, 0.851, 0.659, 1)
+theme_override_font_sizes/font_size = 17
+text = "年糕已经平安回家 · 任务完成"
+
+[node name="ReadyMessage" type="Label" parent="BoardScroll/BoardContent"]
+visible = false
+theme_override_colors/font_color = Color(0.553, 0.851, 0.659, 1)
+text = "两条子任务已经对上，回到暗线向林越报告位置。"
+
+[node name="LooseTitle" type="Label" parent="BoardScroll/BoardContent"]
+theme_override_colors/font_color = Color(0.82, 0.85, 0.9, 1)
+text = "收集到的线索"
+
+[node name="LooseCards" parent="BoardScroll/BoardContent" instance=ExtResource("1_free_drop")]

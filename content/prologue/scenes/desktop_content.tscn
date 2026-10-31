@@ -1,0 +1,87 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Texture2D" path="res://content/assets/desktop_bg.png" id="1_wallpaper"]
+[ext_resource type="Shader" path="res://content/prologue/shaders/desktop_shade.gdshader" id="2_shade"]
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/desktop_app_icon.tscn" id="3_icon"]
+[ext_resource type="PackedScene" path="res://content/prologue/scenes/taskbar.tscn" id="4_taskbar"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_shade"]
+shader = ExtResource("2_shade")
+
+[node name="DesktopContent" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Wallpaper" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+texture = ExtResource("1_wallpaper")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="DesktopShade" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+material = SubResource("ShaderMaterial_shade")
+
+[node name="DesktopIcons" type="VBoxContainer" parent="."]
+offset_left = 18.0
+offset_top = 20.0
+offset_right = 114.0
+offset_bottom = 480.0
+z_index = 5
+theme_override_constants/separation = 6
+
+[node name="chat" parent="DesktopIcons" instance=ExtResource("3_icon")]
+metadata/glyph_text = "💬"
+metadata/caption = "暗线"
+metadata/icon_color = Color(0.145, 0.294, 0.384, 1)
+
+[node name="browser" parent="DesktopIcons" instance=ExtResource("3_icon")]
+metadata/glyph_text = "🌐"
+metadata/caption = "浏览器"
+metadata/icon_color = Color(0.137, 0.345, 0.294, 1)
+
+[node name="board" parent="DesktopIcons" instance=ExtResource("3_icon")]
+metadata/glyph_text = "🗒️"
+metadata/caption = "白板"
+metadata/icon_color = Color(0.294, 0.243, 0.141, 1)
+
+[node name="WindowLayer" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Toasts" type="VBoxContainer" parent="."]
+anchors_preset = 10
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -316.0
+offset_top = -224.0
+offset_right = -16.0
+offset_bottom = -60.0
+grow_horizontal = 0
+grow_vertical = 0
+mouse_filter = 2
+z_index = 1200
+alignment = 2
+theme_override_constants/separation = 8
+
+[node name="Taskbar" parent="." instance=ExtResource("4_taskbar")]
