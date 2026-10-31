@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>夜航搜索</title>
+  <link rel="stylesheet" href="web_page.css">
+  <script defer src="web_page.js"></script>
+</head>
+<body data-site="search" data-resource="res://content/web/search.html">
+  <!-- 搜索站点只提供全网搜索；浏览器导航控件在 Godot 场景中，论坛有独立文档。 -->
+  <main class="search-wrap" id="app">
+    <section class="home-brand" id="searchIntro">
+      <h1><span>夜</span><span>航</span><span>搜</span><span>索</span></h1>
+      <p>YE HANG SEARCH · 你想知道的，总有痕迹</p>
+    </section>
+    <form class="search-form" id="webSearch">
+      <input id="webQuery" aria-label="全网搜索" autocomplete="off" placeholder="搜索。">
+      <button class="primary" type="submit">搜索</button>
+    </form>
+    <section id="searchResults" hidden>
+      <p class="result-count" id="resultCount"></p>
+      <div id="resultList"></div>
+    </section>
+    <article class="paper-page" id="generalPage" hidden>
+      <button class="back" data-page="search_results">← 返回搜索结果</button>
+      <h1 id="generalTitle"></h1>
+      <p class="meta" id="generalUrl"></p>
+      <div class="paper"><p id="generalBody"></p></div>
+    </article>
+  </main>
+</body>
+</html>

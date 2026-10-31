@@ -221,8 +221,9 @@ public partial class BoardInteractionIntegrationTest : Node
 		desktopState.Call("dispatch_action", "open_article", new Dictionary { ["id"] = "lostcat" });
 		desktopState.Call("dispatch_action", "collect_clue", new Dictionary { ["page"] = "article", ["kind"] = "text", ["text"] = "半岁小橘猫，四爪白，脖子上系旧红绳，绳上挂着小铜铃铛。" });
 		desktopState.Call("dispatch_action", "collect_clue", new Dictionary { ["page"] = "article", ["kind"] = "image" });
-		desktopState.Call("dispatch_action", "search", new Dictionary { ["scope"] = "forum", ["query"] = "猫" });
-		desktopState.Call("dispatch_action", "open_forum", new Dictionary { ["id"] = "pet_sighting" });
+		desktopState.Call("dispatch_action", "open_forum", new Dictionary { ["id"] = "anyong" });
+		desktopState.Call("dispatch_action", "forum_search", new Dictionary { ["query"] = "猫" });
+		desktopState.Call("dispatch_action", "open_thread", new Dictionary { ["id"] = "pet_sighting" });
 		desktopState.Call("dispatch_action", "collect_clue", new Dictionary { ["page"] = "forum_post", ["kind"] = "text", ["text"] = "今天下午两点多，老粮站门口那个花坛上蹲着这么一只。" });
 		desktopState.Call("dispatch_action", "collect_clue", new Dictionary { ["page"] = "forum_post", ["kind"] = "image" });
 		desktopState.Call("dispatch_action", "attach_clue", new Dictionary { ["clue_id"] = "clue_1", ["task_id"] = "cat_look" });

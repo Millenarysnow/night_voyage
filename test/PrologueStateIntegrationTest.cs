@@ -36,6 +36,7 @@ public partial class PrologueStateIntegrationTest : Node
 		Variant parsed = Json.ParseString(FileAccess.GetFileAsString("res://content/prologue_cat.json"));
 		Expect(parsed.VariantType == Variant.Type.Dictionary, "序章 JSON 可读取。");
 		_state.Call("configure_content", parsed.AsGodotDictionary());
+		ValidateForumNavigation();
 
 		Dictionary initialSnapshot = _state.Call("get_snapshot").AsGodotDictionary();
 		PackedScene? boardScene = GD.Load<PackedScene>("res://content/prologue/scenes/board_window_content.tscn");
@@ -113,12 +114,14 @@ public partial class PrologueStateIntegrationTest : Node
 		result = Act("open_article", new Dictionary { ["id"] = "lostcat" });
 		Expect(Get(result, "code", "").AsString() == "article_opened", "搜年糕后可以打开寻猫启事。");
 		rejected = Act("open_forum", new Dictionary { ["id"] = "pet_sighting" });
-		Expect(Get(rejected, "code", "").AsString() == "forum_unavailable", "没有在论坛搜索到帖子时不能直接打开目击帖。");
+		Expect(Get(rejected, "code", "").AsString() == "forum_unavailable", "帖子 ID 不能冒充独立论坛站点的 ID。");
 
 		Act("collect_clue", new Dictionary { ["page"] = "article", ["kind"] = "text", ["text"] = "特征：半岁小橘猫，四爪白，脖子上系一根旧红绳，绳上一个小铜铃铛。" });
 		Act("collect_clue", new Dictionary { ["page"] = "article", ["kind"] = "image" });
-		Act("search", new Dictionary { ["scope"] = "forum", ["query"] = "猫" });
-		Act("open_forum", new Dictionary { ["id"] = "pet_sighting" });
+		Act("search", new Dictionary { ["scope"] = "web", ["query"] = "暗涌" });
+		Act("open_forum", new Dictionary { ["id"] = "anyong" });
+		Act("forum_search", new Dictionary { ["query"] = "猫" });
+		Act("open_thread", new Dictionary { ["id"] = "pet_sighting" });
 		Act("collect_clue", new Dictionary { ["page"] = "forum_post", ["kind"] = "text", ["text"] = "今天下午两点多，我路过南山路口，老粮站门口那个花坛上蹲着这么一只。" });
 
 		Dictionary snapshot = _state.Call("get_snapshot").AsGodotDictionary();
@@ -261,6 +264,94 @@ public partial class PrologueStateIntegrationTest : Node
 		Expect(resetRevision > completedRevision, "重开序章时修订号仍保持单调递增。");
 
 		GD.Print(_failed ? "[FAIL] 序章状态机集成验收失败。" : "[PASS] 序章状态机集成验收通过。");
+	}
+
+	/// <summary>
+	/// 按真实网站层级验证搜索边界、提前浏览、分类、历史和多帖来源。
+	/// 结束后重置进度，让原有找猫流程继续从干净开局验收。
+	/// </summary>
+	private void ValidateForumNavigation()
+	{
+		Act("begin", new Dictionary());
+		Dictionary result = Act("search", new Dictionary { ["query"] = "暗涌" });
+		Dictionary snapshot = result["snapshot"].AsGodotDictionary();
+		Godot.Collections.Array results = snapshot["search_results"].AsGodotArray();
+		Expect(results.Count == 1 && results[0].AsGodotDictionary()["kind"].AsString() == "forum_site",
+			"搜暗涌只发现独立站点，不把站名当帖子关键词。");
+		long revision = snapshot["revision"].AsInt64();
+		result = Act("forum_search", new Dictionary { ["query"] = "猫" });
+		Expect(result["code"].AsString() == "forum_not_open" && result["revision"].AsInt64() == revision,
+			"站外不能发起站内筛选，失败不改动浏览历史或修订号。");
+		result = Act("search", new Dictionary { ["scope"] = "forum", ["query"] = "猫" });
+		Expect(!result["ok"].AsBool(), "旧版浏览器的论坛搜索范围被显式拒绝。");
+		result = Act("open_forum", new Dictionary { ["id"] = "anyong" });
+		snapshot = result["snapshot"].AsGodotDictionary();
+		Expect(snapshot["page"].AsString() == "forum" && snapshot["forum_results"].AsGodotArray().Count == 7,
+			"未收录启事线索也可进入论坛，开局显示七条原型帖子。");
+		Expect(snapshot["browser_url"].AsString() == "https://anyong.bbs/" &&
+			snapshot["browser_resource"].AsString() == "res://content/web/forum.html",
+			"论坛有自己的逻辑地址和独立 CEF 网页资源。");
+		Act("open_thread", new Dictionary { ["id"] = "rules" });
+		snapshot = _state!.Call("get_snapshot").AsGodotDictionary();
+		Expect(!snapshot["forum_post_opened"].AsBool(), "阅读版规不会误记为读过找猫目击帖。");
+		Act("collect_clue", new Dictionary { ["page"] = "forum_post", ["kind"] = "text", ["text"] = "同一段摘录" });
+		Act("open_thread", new Dictionary { ["id"] = "lift" });
+		result = Act("collect_clue", new Dictionary { ["page"] = "forum_post", ["kind"] = "text", ["text"] = "同一段摘录" });
+		Godot.Collections.Array clues = result["snapshot"].AsGodotDictionary()["clues"].AsGodotArray();
+		Expect(clues.Count == 2 && clues[0].AsGodotDictionary()["post_id"].AsString() == "rules" &&
+			clues[1].AsGodotDictionary()["post_id"].AsString() == "lift",
+			"不同帖子的摘录分别保存来源，不因同样文字互相覆盖。");
+		result = Act("forum_search", new Dictionary { ["query"] = "猫", ["category"] = "全部" });
+		snapshot = result["snapshot"].AsGodotDictionary();
+		Expect(snapshot["forum_results"].AsGodotArray().Count == 1 && snapshot["search_query"].AsString() == "暗涌",
+			"论坛搜猫只筛选站内帖子，并保留全网搜索词。");
+		result = Act("forum_search", new Dictionary { ["category"] = "都市怪谈" });
+		Expect(result["snapshot"].AsGodotDictionary()["forum_results"].AsGodotArray().Count == 0,
+			"分类与关键词同时生效，不把本地猫帖塞进怪谈区。");
+		result = Act("forum_search", new Dictionary { ["query"] = "" });
+		Expect(result["snapshot"].AsGodotDictionary()["forum_results"].AsGodotArray().Count == 4,
+			"清空站内关键词恢复当前分类的四条怪谈。");
+		result = Act("forum_search", new Dictionary { ["query"] = "备用电源", ["category"] = "全部" });
+		results = result["snapshot"].AsGodotDictionary()["forum_results"].AsGodotArray();
+		Expect(results.Count == 1 && results[0].AsGodotDictionary()["id"].AsString() == "lift",
+			"站内搜索包括回复正文，不使用写死的猫关键词表。");
+		result = Act("forum_search", new Dictionary { ["query"] = "夜行灯" });
+		Expect(result["snapshot"].AsGodotDictionary()["forum_results"].AsGodotArray().Count >= 2,
+			"站内搜索支持作者和回帖用户名。");
+		Act("forum_search", new Dictionary { ["query"] = "猫", ["category"] = "本地" });
+		result = Act("open_thread", new Dictionary { ["id"] = "pet_sighting" });
+		snapshot = result["snapshot"].AsGodotDictionary();
+		Expect(snapshot["browser_url"].AsString().EndsWith("thread/pet_sighting") && snapshot["forum_post_opened"].AsBool(),
+			"帖子具有独立地址，找猫里程碑只在真正阅读猫帖后置位。");
+		Expect(snapshot["active_post"].AsGodotDictionary()["floors"].AsGodotArray().Count == 4,
+			"找猫尚未完成时，不显示也不索引失主领走的收尾楼。");
+		result = Act("browser_back", new Dictionary());
+		snapshot = result["snapshot"].AsGodotDictionary();
+		Expect(snapshot["page"].AsString() == "forum" && snapshot["forum_query"].AsString() == "猫" &&
+			snapshot["forum_category"].AsString() == "本地", "后退恢复原站内查询与分类。");
+		result = Act("browser_forward", new Dictionary());
+		Expect(result["snapshot"].AsGodotDictionary()["active_post_id"].AsString() == "pet_sighting",
+			"前进恢复同一帖子，浏览历史不撤销已收录线索。");
+		Act("browser_back", new Dictionary());
+		result = Act("forum_search", new Dictionary { ["query"] = "不存在的词" });
+		Expect(!result["snapshot"].AsGodotDictionary()["can_go_forward"].AsBool(),
+			"后退后发起新搜索会截断旧前进分支。");
+		result = Act("browser_navigate", new Dictionary { ["page"] = "search_results" });
+		Expect(result["snapshot"].AsGodotDictionary()["search_query"].AsString() == "暗涌",
+			"返回全网结果仍保留论坛入口的原查询。");
+		result = Act("search", new Dictionary { ["query"] = "红绳" });
+		Expect(result["snapshot"].AsGodotDictionary()["search_results"].AsGodotArray().Count == 0,
+			"已读猫帖后，全网搜索仍不会泄露 forum_only 帖子。");
+		result = Act("browser_address", new Dictionary { ["address"] = "anyong.bbs" });
+		Expect(result["snapshot"].AsGodotDictionary()["page"].AsString() == "forum", "地址栏可以直接进入已定义的网站。");
+		result = Act("browser_address", new Dictionary { ["address"] = "https://anyong.bbs/thread/missing" });
+		Expect(result["code"].AsString() == "thread_unavailable", "无效帖子地址明确报错，不静默跳回首页。");
+		result = Act("browser_address", new Dictionary { ["address"] = "https://anyong.bbs.evil/" });
+		Expect(result["code"].AsString() == "unknown_address", "站点路由精确匹配域名，不使用包含关系误跳转。");
+		_state.Call("reset");
+		snapshot = _state.Call("get_snapshot").AsGodotDictionary();
+		Expect(snapshot["page"].AsString() == "home" && !snapshot["can_go_back"].AsBool() &&
+			snapshot["clues"].AsGodotArray().Count == 0, "重开清除浏览历史和收录，回到夜航搜索首页。");
 	}
 
 	/// <summary>执行一项动作并确保状态机始终返回可序列化结果。</summary>

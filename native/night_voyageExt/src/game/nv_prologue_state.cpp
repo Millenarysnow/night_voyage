@@ -135,6 +135,146 @@ bool NVPrologueState::results_contain_id(const String &result_id) const {
 	return false;
 }
 
+Dictionary NVPrologueState::find_forum_post(const String &post_id) const {
+	const Array posts = get_content_array("forum", "posts");
+	for (int64_t i = 0; i < posts.size(); ++i) {
+		const Dictionary post = posts[i];
+		if (String(post["id"]) == post_id) {
+			return post;
+		}
+	}
+	return Dictionary();
+}
+
+Dictionary NVPrologueState::project_forum_post(const Dictionary &post) const {
+	// 内容字段是独立投影，页面不能通过修改快照污染后续搜索和帖子正文。
+	Dictionary projected = post.duplicate(true);
+	Array visible_floors;
+	const Array floors = post.get("floors", Array());
+	for (int64_t i = 0; i < floors.size(); ++i) {
+		const Dictionary floor = floors[i];
+		if (!bool(floor.get("requires_complete", false)) || complete) {
+			visible_floors.push_back(floor.duplicate(true));
+		}
+	}
+	projected["floors"] = visible_floors;
+	return projected;
+}
+
+bool NVPrologueState::forum_post_matches(const Dictionary &post, const String &query) const {
+	if (query.is_empty()) {
+		return true;
+	}
+	String text = String(post["title"]) + " " + String(post["author"]) + " " +
+		String(post["body"]) + " " + String(post["category"]);
+	const Dictionary projected = project_forum_post(post);
+	const Array floors = projected["floors"];
+	for (int64_t i = 0; i < floors.size(); ++i) {
+		const Dictionary floor = floors[i];
+		// 原型的跑题楼层仍可阅读，但不得把整栋楼带入不相关的搜索结果。
+		if (!bool(floor.get("no_search", false))) {
+			text += " " + String(floor["author"]) + " " + String(floor["text"]);
+		}
+	}
+	// 站名不是帖子主题；搜“暗涌/论坛/bbs”只用于发现网站，不把版规等整楼捎上。
+	text = text.to_lower();
+	const Array excluded_terms = get_content_array("forum", "search_excluded_terms");
+	for (int64_t i = 0; i < excluded_terms.size(); ++i) {
+		text = text.replace(String(excluded_terms[i]).to_lower(), " ");
+	}
+	return text.contains(query.to_lower());
+}
+
+Array NVPrologueState::get_forum_results() const {
+	Array results;
+	const Array posts = get_content_array("forum", "posts");
+	for (int64_t i = 0; i < posts.size(); ++i) {
+		const Dictionary post = posts[i];
+		if ((forum_category == U"全部" || String(post["category"]) == forum_category) &&
+				forum_post_matches(post, forum_query)) {
+			results.push_back(make_search_result(post, "forum_post"));
+		}
+	}
+	return results;
+}
+
+Dictionary NVPrologueState::get_browser_route() const {
+	Dictionary route;
+	route["page"] = current_page;
+	route["web_query"] = last_search_query;
+	route["web_results"] = current_results.duplicate(true);
+	route["result_id"] = active_result_id;
+	route["post_id"] = active_post_id;
+	route["forum_query"] = forum_query;
+	route["forum_category"] = forum_category;
+	return route;
+}
+
+void NVPrologueState::remember_browser_route() {
+	const Dictionary route = get_browser_route();
+	if (browser_history_index >= 0) {
+		const Dictionary previous = browser_history[browser_history_index];
+		// 查询结果由数据和进度产生；识别重复导航只比较路由语义字段。
+		bool same_route = true;
+		const char *keys[] = { "page", "web_query", "result_id", "post_id", "forum_query", "forum_category" };
+		for (const char *key : keys) {
+			if (String(previous[key]) != String(route[key])) {
+				same_route = false;
+				break;
+			}
+		}
+		if (same_route) {
+			browser_history[browser_history_index] = route;
+			return;
+		}
+	}
+	browser_history.resize(browser_history_index + 1);
+	browser_history.push_back(route);
+	browser_history_index = browser_history.size() - 1;
+}
+
+void NVPrologueState::restore_browser_route(const Dictionary &route) {
+	current_page = route["page"];
+	last_search_query = route["web_query"];
+	current_results = Array(route["web_results"]).duplicate(true);
+	active_result_id = route["result_id"];
+	active_post_id = route["post_id"];
+	forum_query = route["forum_query"];
+	forum_category = route["forum_category"];
+}
+
+Dictionary NVPrologueState::get_browser_page() const {
+	Dictionary page;
+	const Dictionary search = get_section("search");
+	const Dictionary forum = get_section("forum");
+	const Dictionary article = get_section("article");
+	if (current_page == "forum" || current_page == "forum_post") {
+		const Dictionary post = find_forum_post(active_post_id);
+		page["url"] = current_page == "forum" ? String(forum["url"]) : String(post["url"]);
+		page["title"] = current_page == "forum" ? String(forum["title"]) : String(post["title"]) + " - " + String(forum["site"]);
+		page["resource"] = forum["page_resource"];
+	} else if (current_page == "article") {
+		page["url"] = article["url"];
+		page["title"] = article["title"];
+		page["resource"] = article["page_resource"];
+	} else {
+		page["url"] = current_page == "home" ? String(search["url"]) : String(search["url"]) + "?q=" + last_search_query.uri_encode();
+		page["title"] = current_page == "home" ? String(search["title"]) : last_search_query + String(" - ") + String(search["title"]);
+		page["resource"] = search["page_resource"];
+		if (current_page == "web_result") {
+			for (int64_t i = 0; i < current_results.size(); ++i) {
+				const Dictionary result = current_results[i];
+				if (String(result["id"]) == active_result_id) {
+					page["url"] = result["url"];
+					page["title"] = result["title"];
+					break;
+				}
+			}
+		}
+	}
+	return page;
+}
+
 bool NVPrologueState::is_broad_query(const String &query) const {
 	const Array broad_queries = get_content_array("search", "broad_queries");
 	const String normalized_query = query.strip_edges();
@@ -171,6 +311,13 @@ Dictionary NVPrologueState::make_search_result(const Dictionary &source, const S
 	result["description"] = source.get("description", source.get("desc", ""));
 	result["image"] = source.get("image", source.get("img", ""));
 	result["image_caption"] = source.get("image_caption", source.get("imgCap", ""));
+	// 帖子列表的表现数据来自内容文件；C++ 只生成统一的只读条目。
+	result["author"] = source.get("author", "");
+	result["category"] = source.get("category", "");
+	result["time"] = source.get("time", "");
+	result["pinned"] = source.get("pinned", false);
+	result["replies"] = source.get("replies", 0);
+	result["views"] = source.get("views", 0);
 	return result;
 }
 
@@ -243,7 +390,8 @@ void NVPrologueState::commit_state_change() {
 }
 
 void NVPrologueState::configure_content(const Dictionary &p_content) {
-	content = p_content;
+	// 规则层持有独立内容副本，防止调用方在配置后改写帖子或搜索条件。
+	content = p_content.duplicate(true);
 	reset();
 }
 
@@ -268,15 +416,14 @@ void NVPrologueState::configure_pet(const String &species, const String &name,
 	}
 	content["matching"] = matching;
 	Dictionary article_data = get_section("article");
-	Dictionary forum_data = get_section("forum");
 	if (!article.is_empty()) {
 		article_data["id"] = article;
 	}
 	if (!forum.is_empty()) {
-		forum_data["id"] = forum;
+		pet["forum_post_id"] = forum;
 	}
+	content["pet"] = pet;
 	content["article"] = article_data;
-	content["forum"] = forum_data;
 	reset();
 }
 
@@ -293,15 +440,18 @@ void NVPrologueState::reset() {
 	current_results.clear();
 	current_page = "home";
 	active_result_id = "";
-	last_search_scope = "web";
 	last_search_query = "";
+	forum_query = "";
+	forum_category = U"全部";
+	active_post_id = "";
+	browser_history.clear();
+	browser_history_index = -1;
+	remember_browser_route();
 	// 初次注入内容时从零开始；运行中重置仍视为一次状态变化，保持修订号单调递增。
 	revision = previous_revision > 0 ? previous_revision + 1 : 0;
 	next_clue_id = 1;
 	started = false;
 	broad_search_answered = false;
-	article_result_available = false;
-	forum_result_available = false;
 	article_opened = false;
 	forum_post_opened = false;
 	notice_seen_said = false;
@@ -320,7 +470,7 @@ void NVPrologueState::reset() {
 Dictionary NVPrologueState::get_pet_profile() const {
 	Dictionary profile = get_section("pet");
 	profile["article_id"] = get_content_text("article", "id", "lost_pet");
-	profile["forum_id"] = get_content_text("forum", "id", "pet_sighting");
+	profile["forum_id"] = get_content_text("pet", "forum_post_id");
 	return profile;
 }
 
@@ -331,9 +481,21 @@ Dictionary NVPrologueState::get_snapshot() const {
 	snapshot["started"] = started;
 	snapshot["page"] = current_page;
 	snapshot["active_result_id"] = active_result_id;
-	snapshot["search_scope"] = last_search_scope;
+	snapshot["search_scope"] = "web";
 	snapshot["search_query"] = last_search_query;
-	snapshot["search_results"] = current_results;
+	snapshot["search_results"] = current_results.duplicate(true);
+	snapshot["forum_query"] = forum_query;
+	snapshot["forum_category"] = forum_category;
+	snapshot["forum_results"] = get_forum_results();
+	snapshot["active_post_id"] = active_post_id;
+	const Dictionary active_post = find_forum_post(active_post_id);
+	snapshot["active_post"] = active_post.is_empty() ? Dictionary() : project_forum_post(active_post);
+	const Dictionary browser_page = get_browser_page();
+	snapshot["browser_url"] = browser_page["url"];
+	snapshot["browser_title"] = browser_page["title"];
+	snapshot["browser_resource"] = browser_page["resource"];
+	snapshot["can_go_back"] = browser_history_index > 0;
+	snapshot["can_go_forward"] = browser_history_index + 1 < browser_history.size();
 	snapshot["pet"] = get_pet_profile();
 	// 快照是只读投影的独立副本，界面持有旧快照或编辑字典均不能改到权威状态。
 	snapshot["clues"] = clues.duplicate(true);
@@ -393,7 +555,7 @@ Dictionary NVPrologueState::get_snapshot() const {
 	quest["tasks"] = task_snapshots;
 	snapshot["quest"] = quest;
 	// 页面只读这份内容投影，不允许通过页面字段反向改写游戏进度。
-	snapshot["content"] = content;
+	snapshot["content"] = content.duplicate(true);
 	return snapshot;
 }
 
@@ -459,8 +621,9 @@ bool NVPrologueState::apply_clue_layout(Dictionary &clue, const Dictionary &payl
 Dictionary NVPrologueState::dispatch_action(const String &action, const Dictionary &payload) {
 	bool success = false;
 	bool changed = false;
+	bool navigated = false;
 	String code = "invalid_action";
-	String message = "当前操作不能推进序章。";
+	String message = U"当前操作不能推进序章。";
 	Array say;
 
 	if (action == "begin") {
@@ -469,7 +632,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			changed = true;
 			success = true;
 			code = "started";
-			message = "序章开始。";
+			message = U"序章开始。";
 			const Dictionary dialogue = get_section("dialogue");
 			const Variant intro_value = dialogue.get("intro", Array());
 			if (intro_value.get_type() == Variant::ARRAY) {
@@ -478,71 +641,81 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		} else {
 			success = true;
 			code = "already_started";
-			message = "序章已经开始。";
+			message = U"序章已经开始。";
 		}
 	} else if (action == "search") {
 		if (!started) {
 			code = "not_started";
-			message = "序章尚未开始。";
+			message = U"序章尚未开始。";
 		} else {
 			const String query = String(payload.get("query", "")).strip_edges();
 			const String scope = String(payload.get("scope", "web"));
-			if (query.is_empty() || (scope != "web" && scope != "forum")) {
+			if (query.is_empty() || scope != "web") {
 				code = "invalid_search";
-				message = "搜索内容不能为空。";
+				message = U"全网搜索需要非空关键词；站内搜索请在论坛页面提交。";
 			} else {
-				last_search_scope = scope;
 				last_search_query = query;
 				current_results.clear();
 				active_result_id = "";
-				article_result_available = false;
-				forum_result_available = false;
+				active_post_id = "";
+				current_page = "search_results";
 				const Dictionary dialogue = get_section("dialogue");
-				if (scope == "web") {
-					current_page = "search_results";
-					if (is_broad_query(query)) {
-						const Dictionary search_data = get_section("search");
-						const Variant broad_value = search_data.get("broad_results", Array());
-						if (broad_value.get_type() == Variant::ARRAY) {
-							current_results = broad_value;
-						}
-						if (!broad_search_answered) {
-							broad_search_answered = true;
-							const String noise = String(dialogue.get("noise", ""));
-							if (!noise.is_empty()) {
-								say.push_back(noise);
-							}
-						}
-					} else if (contains_any(query, get_content_array("matching", "article_search_keywords")) ||
-							contains_target(query, get_content_text("pet", "name"))) {
-						article_result_available = true;
-						current_results.push_back(make_search_result(get_section("article"), "article"));
+				if (is_broad_query(query)) {
+					current_results = get_content_array("search", "broad_results").duplicate(true);
+					if (!broad_search_answered) {
+						broad_search_answered = true;
+						const String noise = String(dialogue.get("noise", ""));
+						if (!noise.is_empty()) say.push_back(noise);
 					}
-			} else {
-					current_page = "forum_results";
-				// 原型要求先亲手收下启事文字和照片，之后才出现论坛里可搜索的目击帖。
-				if (has_page_clue("article", "text") && has_page_clue("article", "image") &&
-						contains_any(query, get_content_array("matching", "forum_search_keywords"))) {
-						forum_result_available = true;
-						current_results.push_back(make_search_result(get_section("forum"), "forum"));
+				} else if (contains_any(query, get_content_array("matching", "article_search_keywords")) ||
+						contains_target(query, get_content_text("pet", "name"))) {
+					current_results.push_back(make_search_result(get_section("article"), "article"));
+				}
+				// 网站入口参与全网搜索；forum_only 帖子只参与站内搜索，不以收录进度解锁。
+				if (contains_any(query, get_content_array("forum", "search_keywords"))) {
+					current_results.push_back(make_search_result(get_section("forum"), "forum_site"));
+				}
+				const Array posts = get_content_array("forum", "posts");
+				for (int64_t i = 0; i < posts.size(); ++i) {
+					const Dictionary post = posts[i];
+					if (!bool(post.get("forum_only", false)) && forum_post_matches(post, query)) {
+						current_results.push_back(make_search_result(post, "forum_post"));
 					}
 				}
-			success = true;
-			changed = true;
-			code = "search_completed";
-			message = current_results.is_empty() ? "沒有找到相關結果。" : "搜索完成。";
+				success = changed = navigated = true;
+				code = "search_completed";
+				message = current_results.is_empty() ? U"没有找到相关结果。" : U"搜索完成。";
+			}
 		}
+	} else if (action == "forum_search") {
+		const String category = String(payload.get("category", forum_category));
+		if (!started || (current_page != "forum" && current_page != "forum_post")) {
+			code = "forum_not_open";
+			message = U"站内搜索需要由论坛页面发起。";
+		} else if (!get_content_array("forum", "categories").has(category)) {
+			code = "invalid_forum_category";
+			message = U"论坛中不存在这个分类。";
+		} else {
+			forum_query = String(payload.get("query", forum_query)).strip_edges();
+			forum_category = category;
+			current_page = "forum";
+			active_post_id = "";
+			success = changed = navigated = true;
+			code = "forum_searched";
+			message = U"站内帖子列表已更新。";
 		}
 	} else if (action == "open_article") {
 		const String id = String(payload.get("id", ""));
-		if (started && article_result_available && id == get_content_text("article", "id") &&
+		if (started && id == get_content_text("article", "id") &&
 				results_contain_id(id)) {
 			current_page = "article";
+			active_post_id = "";
 			article_opened = true;
 			success = true;
 			changed = true;
+			navigated = true;
 			code = "article_opened";
-			message = "寻猫启事已打开。";
+			message = U"寻猫启事已打开。";
 			if (!notice_seen_said) {
 				notice_seen_said = true;
 				const String notice_line = String(get_section("dialogue").get("notice_seen", ""));
@@ -552,21 +725,37 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			}
 		} else {
 			code = "article_unavailable";
-			message = "搜索结果里没有这张启事。";
+			message = U"搜索结果里没有这张启事。";
 		}
 	} else if (action == "open_forum") {
 		const String id = String(payload.get("id", ""));
-		if (started && forum_result_available && id == get_content_text("forum", "id") &&
-				results_contain_id(id)) {
-			current_page = "forum_post";
-			forum_post_opened = true;
-			success = true;
-			changed = true;
+		if (started && id == get_content_text("forum", "id")) {
+			current_page = "forum";
+			active_result_id = "";
+			forum_query = "";
+			forum_category = U"全部";
+			active_post_id = "";
+			success = changed = navigated = true;
 			code = "forum_opened";
-			message = "目击帖已打开。";
+			message = U"暗涌论坛首页已打开。";
 		} else {
 			code = "forum_unavailable";
-			message = "搜索结果里没有这条目击信息。";
+			message = U"没有这个论坛站点。";
+		}
+	} else if (action == "open_thread") {
+		const String id = String(payload.get("id", ""));
+		if (started && !find_forum_post(id).is_empty()) {
+			current_page = "forum_post";
+			active_result_id = "";
+			active_post_id = id;
+			// 逛其他帖子不会冒充读过找猫目击帖，也不额外触发找猫对白。
+			if (id == get_content_text("pet", "forum_post_id")) forum_post_opened = true;
+			success = changed = navigated = true;
+			code = "thread_opened";
+			message = U"论坛帖子已打开。";
+		} else {
+			code = "thread_unavailable";
+			message = U"论坛中不存在这个帖子。";
 		}
 	} else if (action == "open_result") {
 		const String id = String(payload.get("id", ""));
@@ -584,42 +773,102 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		if (started && is_general_result) {
 			active_result_id = id;
 			current_page = "web_result";
+			active_post_id = "";
 			success = true;
 			changed = true;
+			navigated = true;
 			code = "result_opened";
-			message = "网页已打开。";
+			message = U"网页已打开。";
 		} else {
 			code = "result_unavailable";
-			message = "搜索结果里没有这个网页。";
+			message = U"搜索结果里没有这个网页。";
 		}
 	} else if (action == "browser_navigate") {
 		const String target_page = String(payload.get("page", "home"));
-		if (!started || (target_page != "home" && target_page != "search_results" && target_page != "forum_results")) {
+		if (!started || (target_page != "home" && target_page != "search_results" && target_page != "forum") ||
+				(target_page == "search_results" && last_search_query.is_empty())) {
 			code = "invalid_page";
-			message = "不能返回这个浏览器页面。";
+			message = U"不能返回这个浏览器页面。";
 		} else {
 			current_page = target_page;
 			active_result_id = "";
-			success = true;
-			changed = true;
+			active_post_id = "";
+			success = changed = navigated = true;
 			code = "browser_navigated";
-			message = "浏览器页面已切换。";
+			message = U"浏览器页面已切换。";
+		}
+	} else if (action == "browser_back" || action == "browser_forward") {
+		const int64_t target = browser_history_index + (action == "browser_back" ? -1 : 1);
+		if (!started || target < 0 || target >= browser_history.size()) {
+			code = "history_unavailable";
+			message = U"没有可切换的浏览历史。";
+		} else {
+			browser_history_index = target;
+			restore_browser_route(browser_history[target]);
+			success = changed = true;
+			code = "browser_navigated";
+			message = U"浏览历史已恢复。";
+		}
+	} else if (action == "browser_address") {
+		String address = String(payload.get("address", "")).strip_edges();
+		if (!address.is_empty() && address.find("://") < 0 && address.contains(".")) address = "https://" + address;
+		const String forum_url = get_content_text("forum", "url");
+		const String search_url = get_content_text("search", "url");
+		Dictionary destination;
+		if (address == forum_url || address + "/" == forum_url) {
+			destination["id"] = get_content_text("forum", "id");
+			return dispatch_action("open_forum", destination);
+		} else if (address.begins_with(forum_url + String("thread/"))) {
+			destination["id"] = address.substr(forum_url.length() + 7).trim_suffix("/");
+			return dispatch_action("open_thread", destination);
+		} else if (address == search_url || address + "/" == search_url) {
+			destination["page"] = "home";
+			return dispatch_action("browser_navigate", destination);
+		} else if (address.begins_with(search_url + String("?q="))) {
+			destination["query"] = address.substr(search_url.length() + 3).uri_decode();
+			return dispatch_action("search", destination);
+		} else if (!address.is_empty() && address.find("://") < 0) {
+			// 地址栏中的普通词交给夜航搜索，域名则必须精确命中本地站点，绝不访问真实外网。
+			destination["query"] = address;
+			return dispatch_action("search", destination);
+		} else if (started && address == get_content_text("article", "url")) {
+			current_page = "article";
+			active_post_id = "";
+			article_opened = true;
+			if (!notice_seen_said) {
+				notice_seen_said = true;
+				say.push_back(get_content_text("dialogue", "notice_seen"));
+			}
+			success = changed = navigated = true;
+			code = "browser_navigated";
+			message = U"寻猫启事已打开。";
+		} else {
+			// 普通网页也能在其结果仍存在时按显示地址重新打开，未知域名则明确报错。
+			for (int64_t i = 0; i < current_results.size(); ++i) {
+				const Dictionary item = current_results[i];
+				if (String(item["kind"]) == "web" && String(item["url"]) == address) {
+					destination["id"] = item["id"];
+					return dispatch_action("open_result", destination);
+				}
+			}
+			code = "unknown_address";
+			message = U"找不到这个网址。";
 		}
 	} else if (action == "collect_clue") {
 		const String kind = String(payload.get("kind", ""));
 		const String page_id = String(payload.get("page", ""));
 		const String selected_text = String(payload.get("text", "")).strip_edges();
 		const bool valid_page = (page_id == "article" && article_opened) ||
-				(page_id == "forum_post" && forum_post_opened);
+				(page_id == "forum_post" && !find_forum_post(active_post_id).is_empty());
 		if (!valid_page || current_page != page_id) {
 			code = "clue_unavailable";
-			message = "请先打开线索所在的页面。";
+			message = U"请先打开线索所在的页面。";
 		} else if (kind != "text" && kind != "image") {
 			code = "invalid_clue_kind";
-			message = "无法收录这种内容。";
+			message = U"无法收录这种内容。";
 		} else if (kind == "text" && (selected_text.is_empty() || selected_text.length() > 600)) {
 			code = "invalid_clue_text";
-			message = "这段文字不能作为摘录。";
+			message = U"这段文字不能作为摘录。";
 		} else {
 			bool already_collected = false;
 			for (int64_t i = 0; i < clues.size(); ++i) {
@@ -628,6 +877,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 				}
 				const Dictionary clue = clues[i];
 				if (String(clue.get("page", "")) == page_id && String(clue.get("kind", "")) == kind &&
+						(page_id != "forum_post" || String(clue.get("post_id", "")) == active_post_id) &&
 						String(clue.get("text", "")) == selected_text) {
 					already_collected = true;
 					break;
@@ -636,12 +886,13 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			if (already_collected) {
 				success = true;
 				code = "clue_already_collected";
-				message = "这条线索已经收进白板。";
+				message = U"这条线索已经收进白板。";
 			} else {
 				Dictionary clue;
 				clue["id"] = "clue_" + String::num_int64(next_clue_id++);
 				clue["kind"] = kind;
 				clue["page"] = page_id;
+				clue["post_id"] = page_id == "forum_post" ? active_post_id : "";
 				clue["text"] = kind == "text" ? selected_text : "";
 				clue["task_id"] = "";
 				clue["x"] = Variant();
@@ -651,12 +902,12 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 				clue["note"] = "";
 				if (page_id == "article") {
 					const Dictionary article = get_section("article");
-					clue["source"] = article.get("short_source", "寻猫启事");
+					clue["source"] = article.get("short_source", U"寻猫启事");
 					clue["image"] = kind == "image" ? article.get("image", "") : "";
 					clue["caption"] = kind == "image" ? article.get("image_caption", "") : "";
 				} else {
-					const Dictionary forum = get_section("forum");
-					clue["source"] = forum.get("short_source", "暗涌论坛");
+					const Dictionary forum = find_forum_post(active_post_id);
+					clue["source"] = forum.get("short_source", U"暗涌论坛");
 					clue["image"] = kind == "image" ? forum.get("image", "") : "";
 					clue["caption"] = kind == "image" ? forum.get("image_caption", "") : "";
 				}
@@ -665,7 +916,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 				success = true;
 				changed = true;
 				code = "clue_collected";
-				message = "线索已收进白板。";
+				message = U"线索已收进白板。";
 			}
 		}
 	} else if (action == "attach_clue") {
@@ -674,14 +925,14 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		const int clue_index = find_clue_index(clue_id);
 		if (clue_index < 0 || find_task(task_id).is_empty()) {
 			code = "invalid_attachment";
-			message = "这张卡片或任务当前不存在。";
+			message = U"这张卡片或任务当前不存在。";
 		} else {
 			Dictionary clue = clues[clue_index];
 			bool layout_changed = false;
 			if ((payload.has("scale") || payload.has("rotation")) &&
 					!apply_clue_layout(clue, payload, layout_changed)) {
 				code = "invalid_clue_layout";
-				message = "线索卡片变换数据无效。";
+				message = U"线索卡片变换数据无效。";
 				return make_result(false, code, message, say);
 			}
 			if (String(clue.get("task_id", "")) != task_id) {
@@ -710,14 +961,14 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			}
 			success = true;
 			code = quest_ready ? "quest_ready" : "clue_attached";
-			message = quest_ready ? "白板上的线索已经对上。" : "线索已放到任务下。";
+			message = quest_ready ? U"白板上的线索已经对上。" : U"线索已放到任务下。";
 		}
 	} else if (action == "detach_clue") {
 		const String clue_id = String(payload.get("clue_id", ""));
 		const int clue_index = find_clue_index(clue_id);
 		if (clue_index < 0) {
 			code = "unknown_clue";
-			message = "白板上没有这张卡片。";
+			message = U"白板上没有这张卡片。";
 		} else {
 			Dictionary clue = clues[clue_index];
 			bool layout_changed = false;
@@ -725,7 +976,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 					payload.has("rotation") || payload.has("note")) &&
 					!apply_clue_layout(clue, payload, layout_changed)) {
 				code = "invalid_clue_layout";
-				message = "线索卡片布局数据无效。";
+				message = U"线索卡片布局数据无效。";
 				return make_result(false, code, message, say);
 			}
 			if (!String(clue.get("task_id", "")).is_empty()) {
@@ -738,24 +989,24 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			}
 			success = true;
 			code = "clue_detached";
-			message = "线索已放回白板自由区。";
+			message = U"线索已放回白板自由区。";
 		}
 	} else if (action == "update_clue") {
 		const String clue_id = String(payload.get("clue_id", ""));
 		const int clue_index = find_clue_index(clue_id);
 		if (clue_index < 0) {
 			code = "unknown_clue";
-			message = "白板上没有这张卡片。";
+			message = U"白板上没有这张卡片。";
 		} else {
 			Dictionary clue = clues[clue_index];
 			if (!apply_clue_layout(clue, payload, changed)) {
 				code = "invalid_clue_layout";
-				message = "线索卡片布局数据无效或没有可保存的字段。";
+				message = U"线索卡片布局数据无效或没有可保存的字段。";
 			} else {
 				clues[clue_index] = clue;
 				success = true;
 				code = "clue_updated";
-				message = "白板线索卡已更新。";
+				message = U"白板线索卡已更新。";
 			}
 		}
 	} else if (action == "remove_clue") {
@@ -763,14 +1014,14 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		const int clue_index = find_clue_index(clue_id);
 		if (clue_index < 0) {
 			code = "unknown_clue";
-			message = "白板上没有这张卡片。";
+			message = U"白板上没有这张卡片。";
 		} else {
 			clues.remove_at(clue_index);
 			evaluate_quest_tasks();
 			success = true;
 			changed = true;
 			code = "clue_removed";
-			message = "线索卡已从白板撕下。";
+			message = U"线索卡已从白板撕下。";
 		}
 	} else if (action == "tidy_board") {
 		// 整理只重置摆放与单卡变换，保留线索内容、批注、任务归属和已经答对的里程碑。
@@ -786,7 +1037,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		success = true;
 		changed = true;
 		code = "board_tidied";
-		message = "白板卡片已重新整理。";
+		message = U"白板卡片已重新整理。";
 	} else if (action == "set_board_view") {
 		const Variant pan_x_value = payload.get("pan_x", Variant());
 		const Variant pan_y_value = payload.get("pan_y", Variant());
@@ -801,7 +1052,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		const bool auto_fit_valid = auto_fit_value.get_type() == Variant::BOOL;
 		if (!numeric_values || !auto_fit_valid) {
 			code = "invalid_board_view";
-			message = "白板镜头状态字段不完整。";
+			message = U"白板镜头状态字段不完整。";
 		} else {
 			const double pan_x = pan_x_value.get_type() == Variant::FLOAT ? static_cast<double>(pan_x_value) : static_cast<int64_t>(pan_x_value);
 			const double pan_y = pan_y_value.get_type() == Variant::FLOAT ? static_cast<double>(pan_y_value) : static_cast<int64_t>(pan_y_value);
@@ -809,7 +1060,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			const double rotation = rotation_value.get_type() == Variant::FLOAT ? static_cast<double>(rotation_value) : static_cast<int64_t>(rotation_value);
 			if (!std::isfinite(pan_x) || !std::isfinite(pan_y) || !std::isfinite(zoom) || zoom <= 0.0 || !std::isfinite(rotation)) {
 				code = "invalid_board_view";
-				message = "白板镜头数值超出有效范围。";
+				message = U"白板镜头数值超出有效范围。";
 			} else {
 				board_view["pan_x"] = pan_x;
 				board_view["pan_y"] = pan_y;
@@ -819,7 +1070,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 				success = true;
 				changed = true;
 				code = "board_view_updated";
-				message = "白板视角已保存。";
+				message = U"白板视角已保存。";
 			}
 		}
 	} else if (action == "chat") {
@@ -827,12 +1078,12 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		const Dictionary dialogue = get_section("dialogue");
 		if (text.is_empty()) {
 			code = "empty_chat";
-			message = "消息不能为空。";
+			message = U"消息不能为空。";
 		} else if (complete) {
 			success = true;
 			code = "prologue_complete";
-			message = "年糕已经送回家了。";
-			say.push_back(dialogue.get("fallback", "我先把这件事办完。"));
+			message = U"年糕已经送回家了。";
+			say.push_back(dialogue.get("fallback", U"我先把这件事办完。"));
 		} else if (contains_any(text, get_content_array("matching", "location_keywords")) ||
 				is_rough_location(text) || contains_any(text, get_content_array("matching", "location_question_keywords"))) {
 			// 玩家提前报地址会收到原型中的“还得先把猫样子认准”回应，而不是泛化兜底。
@@ -842,8 +1093,8 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		} else {
 			success = true;
 			code = "fallback";
-			message = "林越还没摸到这个话题。";
-			const String fallback = String(dialogue.get("fallback", "这个方向我还没摸着边。"));
+			message = U"林越还没摸到这个话题。";
+			const String fallback = String(dialogue.get("fallback", U"这个方向我还没摸着边。"));
 			if (!fallback.is_empty()) {
 				say.push_back(fallback);
 			}
@@ -852,19 +1103,19 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		const String location = String(payload.get("location", "")).strip_edges();
 		if (location.is_empty()) {
 			code = "empty_location";
-			message = "位置不能为空。";
+			message = U"位置不能为空。";
 		} else if (complete) {
 			success = true;
 			code = "prologue_complete";
-			message = "年糕已经送回家了。";
+			message = U"年糕已经送回家了。";
 		} else if (returning) {
 			success = true;
 			code = "recovery_in_progress";
-			message = "林越正在去接年糕的路上。";
+			message = U"林越正在去接年糕的路上。";
 		} else if (!quest_ready) {
 			success = true;
 			code = "quest_not_ready";
-			message = "林越还不确定猫的样子。";
+			message = U"林越还不确定猫的样子。";
 			const String line = String(get_section("dialogue").get("not_yet", ""));
 			if (!line.is_empty()) {
 				say.push_back(line);
@@ -874,7 +1125,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			changed = true;
 			success = true;
 			code = "location_confirmed";
-			message = "位置确认，林越出发去接年糕。";
+			message = U"位置确认，林越出发去接年糕。";
 			const String line = String(get_section("dialogue").get("go", ""));
 			if (!line.is_empty()) {
 				say.push_back(line);
@@ -882,7 +1133,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		} else if (is_rough_location(location)) {
 			success = true;
 			code = "rough_location";
-			message = "还需要一个更具体的位置。";
+			message = U"还需要一个更具体的位置。";
 			const String line = String(get_section("dialogue").get("rough_place", ""));
 			if (!line.is_empty()) {
 				say.push_back(line);
@@ -890,7 +1141,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		} else {
 			success = true;
 			code = "wrong_location";
-			message = "这个地点和目击帖对不上。";
+			message = U"这个地点和目击帖对不上。";
 			const String line = String(get_section("dialogue").get("wrong_place", ""));
 			if (!line.is_empty()) {
 				say.push_back(line);
@@ -903,7 +1154,7 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 			changed = true;
 			success = true;
 			code = "recovery_complete";
-			message = "年糕已经平安回家。";
+			message = U"年糕已经平安回家。";
 			const Dictionary dialogue = get_section("dialogue");
 			const Variant done_value = dialogue.get("done", Array());
 			if (done_value.get_type() == Variant::ARRAY) {
@@ -933,20 +1184,23 @@ Dictionary NVPrologueState::dispatch_action(const String &action, const Dictiona
 		} else if (complete) {
 			success = true;
 			code = "already_complete";
-			message = "年糕已经平安回家。";
+			message = U"年糕已经平安回家。";
 		} else {
 			code = "recovery_not_started";
-			message = "林越还没有出发。";
+			message = U"林越还没有出发。";
 		}
 	} else if (action == "snapshot") {
 		success = true;
 		code = "snapshot";
-		message = "已返回当前进度。";
+		message = U"已返回当前进度。";
 	} else {
 		code = "unknown_action";
-		message = "未知的序章操作。";
+		message = U"未知的序章操作。";
 	}
 
+	if (navigated) {
+		remember_browser_route();
+	}
 	if (changed) {
 		commit_state_change();
 	}

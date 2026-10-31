@@ -13,8 +13,6 @@ using System.Collections.Generic;
 public partial class PrologueMain : Control
 {
 	private const string ContentPath = "res://content/prologue_cat.json";
-	private const string BrowserPagePath = "res://content/prologue_browser.html";
-	private const string BrowserExtensionPath = "res://addons/godot_cef/godot_cef.gdextension";
 	private const string NativeExtensionPath = "res://addons/night_voyageExt/bin/night_voyageExt.gdextension";
 	private const string DesktopScenePath = "res://content/prologue/scenes/prologue_desktop.tscn";
 	private const string LockScenePath = "res://content/prologue/scenes/lock_screen.tscn";
@@ -56,12 +54,8 @@ public partial class PrologueMain : Control
 	private Label? _statusLabel;
 	private VBoxContainer? _chatMessages;
 	private LineEdit? _chatInput;
-	private Control? _browserHost;
-	private Control? _browser;
+	private BrowserView? _browserView;
 	private BoardView? _boardView;
-	private bool _browserCreated;
-	private bool _fallbackBrowser;
-	private bool _cefReady;
 	private bool _unlocked;
 	private string _playerName = "";
 	private string _previewedImagePage = "article";
@@ -86,14 +80,9 @@ public partial class PrologueMain : Control
 		RefreshAllViews();
 	}
 
-	/// <summary>等待 CEF 页面报到后发送首份快照，并低频刷新任务栏时钟。</summary>
+	/// <summary>低频刷新任务栏时钟；网页加载与快照同步由浏览器组件独立管理。</summary>
 	public override void _Process(double delta)
 	{
-		if (_cefReady && _browserCreated && _snapshot.Count > 0)
-		{
-			_cefReady = false;
-			SendSnapshotToBrowser();
-		}
 		_clockRefreshElapsed += delta;
 		if (_clockRefreshElapsed >= 0.5)
 		{
@@ -219,12 +208,13 @@ public partial class PrologueMain : Control
 		if (send != null) send.Pressed += SubmitChatInput;
 	}
 
-	/// <summary>浏览器窗的占位面板存在于场景中，原生 CEF 表面只作为插件节点挂入该插槽。</summary>
+	/// <summary>连接可复用浏览器组件；网站规则留在 C++，CEF 加载生命周期留在组件内。</summary>
 	private void InitializeBrowserReferences()
 	{
 		if (_windows.TryGetValue("browser", out WindowRecord? browser))
 		{
-			_browserHost = browser.Frame.GetNodeOrNull<Control>("Body/BrowserContent/BrowserHost");
+			_browserView = browser.Frame.GetNode<BrowserView>("Body/BrowserContent");
+			_browserView.ActionRequested += OnBrowserAction;
 		}
 	}
 
@@ -414,7 +404,7 @@ public partial class PrologueMain : Control
 			_windowTweens[id] = tween;
 		}
 
-		if (id == "browser") CreateBrowser();
+		if (id == "browser") _browserView?.Open();
 		if (id == "board") _boardView?.Configure(_snapshot);
 		if (id == "chat") CallDeferred(MethodName.FocusChatInput);
 	}
@@ -519,86 +509,15 @@ public partial class PrologueMain : Control
 			Mathf.Clamp(position.Y, 0, taskbarTop - 40));
 	}
 
-	/// <summary>创建 CEF 扩展原生控件并挂入浏览器场景预留的 BrowserHost 插槽。</summary>
-	private void CreateBrowser()
+	/// <summary>处理组件提交的语义动作，图片使用原生灯箱，其余规则由 C++ 统一裁决。</summary>
+	private void OnBrowserAction(string action, Dictionary payload)
 	{
-		if (_browserCreated || _browserHost == null) return;
-		_browserCreated = true;
-		if (!ClassDB.ClassExists("CefTexture"))
-		{
-			GDExtensionManager.LoadExtension(ProjectSettings.GlobalizePath(BrowserExtensionPath));
-		}
-
-		if (ClassDB.ClassExists("CefTexture"))
-		{
-			_browser = ClassDB.Instantiate("CefTexture").AsGodotObject() as Control;
-		}
-		if (_browser == null)
-		{
-			_fallbackBrowser = true;
-			Control? content = _windows["browser"].Frame.GetNodeOrNull<Control>("Body/BrowserContent");
-			Label? error = content?.GetNodeOrNull<Label>("BrowserError");
-			if (error != null)
-			{
-				error.Text = "CEF 网页扩展尚未加载。\n请确认 addons/godot_cef/bin 中有本机运行库。";
-				error.Visible = true;
-			}
-			return;
-		}
-
-		_browser.Set("enable_accelerated_osr", false);
-		_browser.Set("url", BrowserPagePath);
-		_browser.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-		_browser.Connect("load_finished", Callable.From<string, int>(OnBrowserLoadFinished));
-		_browser.Connect("ipc_message", Callable.From<string>(OnBrowserIpcMessage));
-		_browserHost.AddChild(_browser);
-	}
-
-	/// <summary>记录 CEF 本地网页加载成功，网页 ready 消息仍负责启动第一次状态同步。</summary>
-	private void OnBrowserLoadFinished(string url, int statusCode)
-	{
-		if (statusCode >= 200 && statusCode < 400) _cefReady = true;
-	}
-
-	/// <summary>接收网页通过 IPC 发出的语义动作，不采信网页自行提交的进度状态。</summary>
-	private void OnBrowserIpcMessage(string rawMessage)
-	{
-		if (rawMessage == "prologue:ready")
-		{
-			_cefReady = true;
-			return;
-		}
-
-		Variant parsed = Json.ParseString(rawMessage);
-		if (parsed.VariantType != Variant.Type.Dictionary) return;
-		Dictionary message = parsed.AsGodotDictionary();
-		if (Read(message, "type", "").AsString() != "action") return;
-
-		string action = Read(message, "action", "").AsString();
-		Dictionary payload = message.ContainsKey("payload")
-			? message["payload"].AsGodotDictionary()
-			: new Dictionary();
 		if (action == "preview_image")
 		{
 			ShowImagePreview(Read(payload, "page", "article").AsString());
 			return;
 		}
-		DispatchAction(action, payload);
-	}
-
-	/// <summary>把 C++ 权威快照序列化后回传给正在显示的网页。</summary>
-	private void SendSnapshotToBrowser()
-	{
-		if (_browser == null || _fallbackBrowser) return;
-		Dictionary message = new()
-		{
-			["version"] = 1,
-			["type"] = "state",
-			["page"] = "prologue",
-			["revision"] = Read(_snapshot, "revision", 0),
-			["snapshot"] = _snapshot,
-		};
-		_browser.Call("send_ipc_message", Json.Stringify(message));
+		_browserView?.ShowActionResult(DispatchAction(action, payload));
 	}
 
 	/// <summary>状态机变化后刷新场景投影，并在浏览器已打开时发送新快照。</summary>
@@ -606,10 +525,6 @@ public partial class PrologueMain : Control
 	{
 		_snapshot = snapshot;
 		RefreshAllViews();
-		if (_browser != null && _windows.TryGetValue("browser", out WindowRecord? browser) && browser.Frame.Visible)
-		{
-			SendSnapshotToBrowser();
-		}
 	}
 
 	/// <summary>向 C++ 状态机提交动作，回显玩家输入并将返回对白加入顺序队列。</summary>
@@ -670,6 +585,7 @@ public partial class PrologueMain : Control
 			_statusLabel.Modulate = complete ? new Color("8dd9a8") : new Color("54b183");
 		}
 		_boardView?.Configure(_snapshot);
+		_browserView?.ApplySnapshot(_snapshot);
 	}
 
 	/// <summary>当前找猫序幕固定在一晚内的十五点二十分。</summary>
@@ -685,7 +601,6 @@ public partial class PrologueMain : Control
 	private void OpenBrowser()
 	{
 		ShowWindow("browser");
-		if (_browser != null) SendSnapshotToBrowser();
 	}
 
 	/// <summary>打开场景化白板窗口并同步最新权威快照。</summary>
@@ -755,7 +670,9 @@ public partial class PrologueMain : Control
 		_previewedImagePage = page == "forum_post" ? "forum_post" : "article";
 		// 浏览器图片继续通过内容快照取得资源，不将具体关卡的图片路径写进界面逻辑。
 		Dictionary content = _snapshot["content"].AsGodotDictionary();
-		Dictionary source = content[_previewedImagePage == "forum_post" ? "forum" : "article"].AsGodotDictionary();
+		Dictionary source = _previewedImagePage == "forum_post"
+			? _snapshot["active_post"].AsGodotDictionary()
+			: content["article"].AsGodotDictionary();
 		_imageOverlay.GetNode<TextureRect>("Card/Image").Texture = LoadTexture(source["image"].AsString());
 		_imageOverlay.GetNode<Label>("Card/Caption").Text = Read(source, "image_caption", "").AsString();
 		_imageOverlay.GetNode<Button>("Card/Collect").Visible = true;

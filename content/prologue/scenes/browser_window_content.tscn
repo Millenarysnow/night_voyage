@@ -1,4 +1,39 @@
-[gd_scene format=3]
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://content/prologue/scripts/BrowserView.cs" id="1_browser"]
+
+[sub_resource type="StyleBoxFlat" id="Style_toolbar"]
+bg_color = Color(0.078, 0.098, 0.141, 1)
+border_color = Color(0.165, 0.196, 0.259, 1)
+border_width_bottom = 1
+
+[sub_resource type="StyleBoxFlat" id="Style_address"]
+bg_color = Color(0.055, 0.071, 0.098, 1)
+border_color = Color(0.2, 0.251, 0.353, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+corner_radius_top_left = 7
+corner_radius_top_right = 7
+corner_radius_bottom_left = 7
+corner_radius_bottom_right = 7
+content_margin_left = 12.0
+content_margin_right = 12.0
+
+[sub_resource type="StyleBoxFlat" id="Style_button"]
+bg_color = Color(0.078, 0.098, 0.141, 1)
+content_margin_left = 10.0
+content_margin_right = 10.0
+
+[sub_resource type="StyleBoxFlat" id="Style_hover"]
+bg_color = Color(0.16, 0.20, 0.27, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_left = 6
+corner_radius_bottom_right = 6
+content_margin_left = 10.0
+content_margin_right = 10.0
 
 [node name="BrowserContent" type="Control"]
 anchors_preset = 15
@@ -6,6 +41,61 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+script = ExtResource("1_browser")
+
+[node name="Toolbar" type="Panel" parent="."]
+anchor_right = 1.0
+offset_bottom = 50.0
+theme_override_styles/panel = SubResource("Style_toolbar")
+
+[node name="Controls" type="HBoxContainer" parent="Toolbar"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 7.0
+offset_right = -8.0
+offset_bottom = -7.0
+theme_override_constants/separation = 6
+
+[node name="Back" type="Button" parent="Toolbar/Controls"]
+custom_minimum_size = Vector2(36, 0)
+layout_mode = 2
+tooltip_text = "后退"
+focus_mode = 0
+theme_override_styles/normal = SubResource("Style_button")
+theme_override_styles/hover = SubResource("Style_hover")
+theme_override_styles/pressed = SubResource("Style_hover")
+text = "←"
+
+[node name="Forward" type="Button" parent="Toolbar/Controls"]
+custom_minimum_size = Vector2(36, 0)
+layout_mode = 2
+tooltip_text = "前进"
+focus_mode = 0
+theme_override_styles/normal = SubResource("Style_button")
+theme_override_styles/hover = SubResource("Style_hover")
+theme_override_styles/pressed = SubResource("Style_hover")
+text = "→"
+
+[node name="Home" type="Button" parent="Toolbar/Controls"]
+custom_minimum_size = Vector2(48, 0)
+layout_mode = 2
+tooltip_text = "夜航搜索首页"
+focus_mode = 0
+theme_override_styles/normal = SubResource("Style_button")
+theme_override_styles/hover = SubResource("Style_hover")
+theme_override_styles/pressed = SubResource("Style_hover")
+text = "主页"
+
+[node name="Address" type="LineEdit" parent="Toolbar/Controls"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 13
+theme_override_styles/normal = SubResource("Style_address")
+theme_override_styles/focus = SubResource("Style_address")
+placeholder_text = "输入网址或搜索词"
+select_all_on_focus = true
+caret_blink = true
 
 [node name="BrowserHost" type="Panel" parent="."]
 anchors_preset = 15
@@ -14,7 +104,7 @@ anchor_top = 0.0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 8.0
-offset_top = 8.0
+offset_top = 50.0
 offset_right = -8.0
 offset_bottom = -8.0
 grow_horizontal = 2
@@ -35,3 +125,16 @@ theme_override_colors/font_color = Color(0.84, 0.86, 0.9, 1)
 horizontal_alignment = 1
 vertical_alignment = 1
 autowrap_mode = 3
+
+[node name="Status" type="Label" parent="."]
+visible = false
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_top = -32.0
+offset_right = -14.0
+offset_bottom = -8.0
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.7, 0.4, 1)
+theme_override_font_sizes/font_size = 12

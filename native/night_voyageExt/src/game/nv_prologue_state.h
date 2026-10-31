@@ -36,15 +36,20 @@ private:
 	Array clues;
 	/** 玩家调整后的白板镜头状态，供关闭窗口或重建界面后继续使用。 */
 	Dictionary board_view;
-	/** 最近一次搜索结果，作为打开页面的前置条件。 */
+	/** 夜航搜索的结果；论坛筛选独立保存，进入站点不会覆盖全网搜索。 */
 	Array current_results;
 	/** 当前 CEF 页面标识，用于拒绝来自非当前页面的收录请求。 */
 	String current_page = "home";
 	/** 当前打开的一般网页结果 ID；只用于 CEF 正文页面的只读显示。 */
 	String active_result_id;
-	/** 最近搜索使用的站点与查询词，属于浏览器视图状态。 */
-	String last_search_scope = "web";
+	/** 全网查询与论坛内查询彼此独立，返回时恢复各自的上下文。 */
 	String last_search_query;
+	String forum_query;
+	String forum_category = U"全部";
+	String active_post_id;
+	/** 历史只记录浏览路由，不回滚已收录线索、任务或剧情进度。 */
+	Array browser_history;
+	int64_t browser_history_index = -1;
 	/** 每次状态变化递增，用来丢弃异步 IPC 返回的旧快照。 */
 	int64_t revision = 0;
 	/** 线索 ID 在本次序章中单调分配，避免重复收录覆盖旧卡片。 */
@@ -53,8 +58,6 @@ private:
 	/** 以下布尔值记录可复用流程中的里程碑与一次性对白。 */
 	bool started = false;
 	bool broad_search_answered = false;
-	bool article_result_available = false;
-	bool forum_result_available = false;
 	bool article_opened = false;
 	bool forum_post_opened = false;
 	bool notice_seen_said = false;
@@ -93,6 +96,22 @@ private:
 	bool has_page_clue(const String &page_id, const String &kind) const;
 	/** 检查网页结果数组中是否含有指定结果 ID。 */
 	bool results_contain_id(const String &result_id) const;
+	/** 从数据定义查找帖子；站点本身与帖子使用不同 ID。 */
+	Dictionary find_forum_post(const String &post_id) const;
+	/** 过滤尚未发生的收尾楼层，不让未来内容参与搜索或正文投影。 */
+	Dictionary project_forum_post(const Dictionary &post) const;
+	/** 按原型的标题、作者、正文、分类和可搜索楼层建立站内搜索文本。 */
+	bool forum_post_matches(const Dictionary &post, const String &query) const;
+	/** 论坛首页与站内搜索共用同一列表，分类和查询条件同时生效。 */
+	Array get_forum_results() const;
+	/** 生成不含剧情进度的浏览路由快照，供后退和前进恢复。 */
+	Dictionary get_browser_route() const;
+	/** 新导航截断前进分支；同一路由重复提交不堆积历史。 */
+	void remember_browser_route();
+	/** 恢复指定历史项；帖子已读里程碑只增不减。 */
+	void restore_browser_route(const Dictionary &route);
+	/** 从内容资源生成逻辑地址、网页标题和对应的本地 CEF 页面资源。 */
+	Dictionary get_browser_page() const;
 	/** 根据内容配置和线索当前挂接位置累积更新两个任务完成状态。 */
 	void evaluate_quest_tasks();
 	/** 生成包含操作结果、对白队列和权威快照的统一响应。 */

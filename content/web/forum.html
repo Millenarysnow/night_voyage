@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>「暗涌」· 推理爱好者论坛</title>
+  <link rel="stylesheet" href="web_page.css">
+  <script defer src="web_page.js"></script>
+</head>
+<body data-site="forum" data-resource="res://content/web/forum.html">
+  <!-- 论坛拥有自己的站头、站内搜索、分类、帖子列表和楼层，不依附于浏览器工具栏。 -->
+  <main class="forum-wrap" id="app">
+    <header class="forum-head">
+      <button class="forum-logo" data-forum-home aria-label="论坛首页">暗</button>
+      <div class="forum-name"><strong id="forumName"></strong><small id="forumSlogan"></small></div>
+      <form class="forum-search" id="forumSearch">
+        <input id="forumQuery" type="search" autocomplete="off" aria-label="论坛站内搜索" placeholder="搜索帖子或用户名。">
+        <button class="secondary" type="submit">搜索</button>
+      </form>
+    </header>
+    <section id="forumIndex">
+      <nav class="forum-tabs" id="forumCategories" aria-label="论坛分类"></nav>
+      <div id="postList"></div>
+    </section>
+    <article class="thread" id="threadPage" hidden>
+      <button class="back" data-page="forum">← 返回论坛</button>
+      <header class="thread-head"><h1 id="threadTitle"></h1><p class="meta" id="threadMeta"></p></header>
+      <section class="thread-body">
+        <div class="avatar" id="threadAvatar"></div>
+        <div class="floor-content">
+          <p class="floor-author" id="threadAuthor"></p>
+          <div class="body" id="threadBody" data-markable="forum_post"></div>
+          <figure id="threadPhotoBlock" hidden>
+            <img class="photo" id="threadPhoto" data-preview="forum_post" alt="帖子附图">
+            <figcaption id="threadCaption"></figcaption>
+          </figure>
+        </div>
+      </section>
+      <div id="threadFloors"></div>
+    </article>
+  </main>
+  <div class="selection-pop" id="selectionPop" hidden><button class="primary" id="collectSelection">收进白板</button></div>
+</body>
+</html>

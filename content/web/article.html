@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>街坊告示</title>
+  <link rel="stylesheet" href="web_page.css">
+  <script defer src="web_page.js"></script>
+</head>
+<body data-site="article" data-resource="res://content/web/article.html">
+  <!-- 告示正文独立于搜索站点；文字、照片和来源从内容资源注入。 -->
+  <main class="paper-page article-site" id="app">
+    <button class="back" data-page="search_results">← 返回搜索结果</button>
+    <h1 id="articleTitle"></h1>
+    <p class="meta" id="articleSource"></p>
+    <figure>
+      <img class="photo" id="articlePhoto" data-preview="article" alt="寻猫启事附图">
+      <figcaption id="articleCaption"></figcaption>
+    </figure>
+    <div class="paper"><p id="articleBody" data-markable="article"></p></div>
+  </main>
+  <div class="selection-pop" id="selectionPop" hidden><button class="primary" id="collectSelection">收进白板</button></div>
+</body>
+</html>

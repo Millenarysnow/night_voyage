@@ -1,361 +1,239 @@
 #nullable enable
-
 using Godot;
 using Godot.Collections;
 using System;
+using System.Threading.Tasks;
 
 /// <summary>
-/// 离线验证序章 CEF 页面、Godot IPC 和 C++ 规则之间的完整往返。
-///
-/// 测试实际驱动网页搜索、启事文字选区、照片预览、论坛搜索与帖子选区，
-/// 确认网页只负责呈现和提交操作，所有进度仍由 C++ 状态机裁决。
+/// 使用真实 BrowserView 场景和 CEF 验证：全网发现网站、站内筛选、原生导航、选区收录、
+/// 图片解码、提前浏览以及找猫完成后新增收尾楼。测试不维护第二套网页加载逻辑。
 /// </summary>
 public partial class PrologueBrowserIntegrationTest : Control
 {
-	private const string BrowserExtensionPath = "res://addons/godot_cef/godot_cef.gdextension";
-	private const string NativeExtensionPath = "res://addons/night_voyageExt/bin/windows/night_voyageExt.windows.template_debug.x86_64.dll";
-	private const string BrowserPagePath = "res://content/prologue_browser.html";
-	private const string ContentPath = "res://content/prologue_cat.json";
-
-	private Node? _state;
-	private Control? _browser;
+	private Node _state = null!;
+	private BrowserView _view = null!;
+	private int _step;
+	private long _handledRevision = -1;
 	private bool _failed;
 	private bool _completed;
-	private bool _waitingForState;
-	private int _step;
-	private int _frameCount;
+	private double _elapsed;
 
-	/// <summary>创建真实 CefTexture 与 C++ 状态机，并在网页 ready 后驱动原型交互。</summary>
+	/// <summary>装配产品使用的浏览器场景，由组件管理独立网站文档的加载和 IPC。</summary>
 	public override void _Ready()
 	{
-		SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-		if (!EnsureExtension("NVPrologueState", NativeExtensionPath))
-		{
-			Fail("NVPrologueState GDExtension 未加载。");
-			return;
-		}
-		if (!EnsureExtension("CefTexture", BrowserExtensionPath))
-		{
-			Fail("Godot CEF GDExtension 未加载。");
-			return;
-		}
-
-		_state = ClassDB.Instantiate("NVPrologueState").AsGodotObject() as Node;
-		if (_state == null)
-		{
-			Fail("无法创建 NVPrologueState。");
-			return;
-		}
+		_state = ClassDB.Instantiate("NVPrologueState").AsGodotObject() as Node ?? throw new InvalidOperationException("NVPrologueState 未注册。");
 		AddChild(_state);
-		Variant parsed = Json.ParseString(FileAccess.GetFileAsString(ContentPath));
-		if (parsed.VariantType != Variant.Type.Dictionary)
-		{
-			Fail("序章内容 JSON 不可读取。");
-			return;
-		}
-		_state.Call("configure_content", parsed.AsGodotDictionary());
+		_state.Call("configure_content", Json.ParseString(FileAccess.GetFileAsString("res://content/prologue_cat.json")).AsGodotDictionary());
 		_state.Call("dispatch_action", "begin", new Dictionary());
-
-		_browser = ClassDB.Instantiate("CefTexture").AsGodotObject() as Control;
-		if (_browser == null)
-		{
-			Fail("无法创建 CefTexture。");
-			return;
-		}
-		_browser.Set("enable_accelerated_osr", false);
-		_browser.Set("url", BrowserPagePath);
-		_browser.SetAnchorsAndOffsetsPreset(LayoutPreset.FullRect);
-		_browser.Connect("load_finished", Callable.From<string, int>(OnLoadFinished));
-		_browser.Connect("load_error", Callable.From<string, int, string>(OnLoadError));
-		_browser.Connect("ipc_message", Callable.From<string>(OnBrowserMessage));
-		AddChild(_browser);
+		_view = GD.Load<PackedScene>("res://content/prologue/scenes/browser_window_content.tscn").Instantiate<BrowserView>();
+		AddChild(_view);
+		_view.ActionRequested += OnAction;
+		_view.PageStateApplied += OnPageApplied;
+		_view.ApplySnapshot(Snapshot());
+		_view.Open();
 	}
 
-	/// <summary>用有限帧数等待整条 CEF 操作链，避免失败时测试进程一直挂住。</summary>
+	/// <summary>按真实时间限制等待，避免帧率差异造成假超时。</summary>
 	public override void _Process(double delta)
 	{
-		if (_completed) return;
-		_frameCount++;
-		if (_frameCount > 1200)
+		_elapsed += delta;
+		if (!_completed && _elapsed > 75) { Expect(false, "CEF 超时，步骤 " + _step); Complete(); }
+	}
+
+	/// <summary>网页和工具栏动作共用 C++ 入口；图片预览后模拟玩家按下收录确认。</summary>
+	private void OnAction(string action, Dictionary payload)
+	{
+		if (action == "preview_image")
 		{
-			Fail("等待 CEF 网页操作链超时，当前测试步骤为 " + _step);
-			CompleteTest();
+			string page = payload["page"].AsString();
+			Dictionary source = page == "forum_post" ? Snapshot()["active_post"].AsGodotDictionary() : Snapshot()["content"].AsGodotDictionary()["article"].AsGodotDictionary();
+			Expect(source["image"].AsString().StartsWith("res://content/assets/"), "灯箱使用当前页面的本地图片。");
+			action = "collect_clue";
+			payload = new Dictionary { ["page"] = page, ["kind"] = "image" };
 		}
-	}
-
-	/// <summary>检查扩展类注册状态，未注册时按资源描述显式加载一次。</summary>
-	private bool EnsureExtension(string className, string extensionPath)
-	{
-		if (ClassDB.CanInstantiate(className)) return true;
-		string absolutePath = ProjectSettings.GlobalizePath(extensionPath);
-		GDExtensionManager.LoadStatus status = GDExtensionManager.LoadExtension(absolutePath);
-		return (status == GDExtensionManager.LoadStatus.Ok ||
-				status == GDExtensionManager.LoadStatus.AlreadyLoaded) && ClassDB.CanInstantiate(className);
-	}
-
-	/// <summary>CEF 网页完成加载用于日志诊断，IPC ready 会启动页面驱动的交互。</summary>
-	private void OnLoadFinished(string url, int statusCode)
-	{
-		Expect(statusCode >= 200 && statusCode < 400, "CEF 本地序章网页加载成功。");
-		GD.Print($"[INFO] CEF 页面加载完成，HTTP {statusCode}，{url}");
-	}
-
-	/// <summary>保留 CEF 的加载错误码与说明，让测试超时前能指出具体页面故障。</summary>
-	private void OnLoadError(string url, int errorCode, string description)
-	{
-		Fail($"CEF 页面加载失败，错误码 {errorCode}，{description}");
-	}
-
-	/// <summary>按协议接收 ready、网页状态确认与玩家操作消息。</summary>
-	private void OnBrowserMessage(string rawMessage)
-	{
-		if (rawMessage == "prologue:ready")
+		Dictionary result = _state.Call("dispatch_action", action, payload).AsGodotDictionary();
+		_view.ShowActionResult(result);
+		if (_step == 22)
 		{
-			GD.Print("[PASS] 网页脚本已通过 CEF IPC 向 Godot 报到。");
-			SendSnapshot();
-			_waitingForState = true;
+			Expect(result["code"].AsString() == "thread_unavailable", "错误帖子地址被明确拒绝。");
+			Expect(_view.GetNode<Label>("Status").Visible && _view.GetNode<Label>("Status").Text.Contains("帖子"), "失败原因以正常中文显示，保留当前网页。");
+			VerifyDesktop();
 			return;
 		}
-
-		Variant parsed = Json.ParseString(rawMessage);
-		if (parsed.VariantType != Variant.Type.Dictionary)
-		{
-			return;
-		}
-		Dictionary message = parsed.AsGodotDictionary();
-		string type = Get(message, "type", "").AsString();
-		if (type == "browser:state_applied")
-		{
-			HandleBrowserStateApplied(message);
-			return;
-		}
-		if (type != "action")
-		{
-			return;
-		}
-
-		string action = Get(message, "action", "").AsString();
-		Dictionary payload = Get(message, "payload", new Dictionary()).AsGodotDictionary();
-		if (action == "search")
-		{
-			HandleSearch(payload);
-		}
-		else if (action == "open_article")
-		{
-			DispatchAndReturn(action, payload, "article_opened", 6);
-		}
-		else if (action == "open_forum")
-		{
-			DispatchAndReturn(action, payload, "forum_opened", 10);
-		}
-		else if (action == "open_result")
-		{
-			DispatchAndReturn(action, payload, "result_opened", 3);
-		}
-		else if (action == "browser_navigate")
-		{
-			DispatchAndReturn(action, payload, "browser_navigated", 4);
-		}
-		else if (action == "collect_clue")
-		{
-			HandleClueCollection(payload);
-		}
-		else if (action == "preview_image")
-		{
-			HandleImagePreview(payload);
-		}
+		Expect(result["ok"].AsBool(), action + " 通过 C++ 裁决。");
+		_view.ApplySnapshot(result["snapshot"].AsGodotDictionary());
 	}
 
-	/// <summary>每次状态快照完成页面重绘且图片载入结束后，推进下一项网页交互。</summary>
-	private void HandleBrowserStateApplied(Dictionary message)
+	/// <summary>收到真实 DOM 与图片解码回执后推进输入；重复或过期回执不会重复执行步骤。</summary>
+	private async void OnPageApplied(Dictionary message)
 	{
-		if (!_waitingForState) return;
-		_waitingForState = false;
-		GD.Print("[PASS] 网页脚本已应用 Godot 返回的状态快照。");
-
-		string page = Get(message, "page", "").AsString();
-		switch (_step)
+		long revision = message["revision"].AsInt64();
+		if (_completed || revision <= _handledRevision || revision != Snapshot()["revision"].AsInt64()) return;
+		_handledRevision = revision;
+		string page = message["page"].AsString();
+		Expect(_view.GetNode<LineEdit>("Toolbar/Controls/Address").Text == message["url"].AsString(), "原生地址栏与网页路由一致。");
+		try
 		{
-			case 0:
-				Eval("document.querySelector('[data-scope=\"forum\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
-				break;
-			case 1:
-				Expect(page == "forum_results", "前置线索未收齐时仍能进入论坛搜索结果页。");
-				Expect(Get(message, "empty_message", "").AsString().Contains("正文摘录和照片收进白板"),
-					"论坛尚未解锁时明确提示需要先收录启事正文和照片。");
-				Eval("document.querySelector('[data-scope=\"web\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
-				break;
-			case 2:
-				Expect(page == "search_results", "泛搜结果仍停留在搜索结果页面。");
-				Eval("document.querySelector('[data-action=\"open_result\"]').click();");
-				break;
-			case 3:
-				Expect(page == "web_result", "泛搜结果可以打开普通网页。");
-				Eval("document.querySelector('[data-page=\"search_results\"]').click();");
-				break;
-			case 4:
-				Expect(page == "search_results", "普通网页可以返回泛搜结果。");
-				Eval("document.getElementById('query').value = '年糕'; document.getElementById('searchForm').requestSubmit();");
-				break;
-			case 5:
-				Eval("document.querySelector('[data-action=\"open_article\"]').click();");
-				break;
-			case 6:
-				Expect(page == "article", "年糕搜索结果打开了寻猫启事页面。");
-				Expect(Get(message, "article_image_width", 0).AsInt32() > 0, "启事照片从项目内本地资源成功显示。");
-				Eval("(()=>{const p=document.querySelector('.paper p'); const r=document.createRange(); r.selectNodeContents(p); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); setTimeout(()=>document.getElementById('collectSelection').click(),0);})();");
-				break;
-			case 7:
-				Expect(Get(message, "article_text_collected", false).AsBool(), "玩家选中的启事文字已进入白板快照。");
-				Eval("document.querySelector('.page img.photo').click();");
-				break;
-			case 8:
-				Expect(Get(message, "article_image_collected", false).AsBool(), "玩家确认收录后启事照片已进入白板快照。");
-				Eval("document.querySelector('[data-scope=\"forum\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
-				break;
-			case 9:
-				Expect(page == "forum_results", "论坛搜索切换到了论坛结果页面。");
-				Eval("document.querySelector('[data-action=\"open_forum\"]').click();");
-				break;
-			case 10:
-				Expect(page == "forum_post", "论坛搜索结果打开了目击帖页面。");
-				Expect(Get(message, "forum_image_width", 0).AsInt32() > 0, "论坛照片从项目内本地资源成功显示。");
-				Eval("(()=>{const p=document.querySelector('.post .body'); const r=document.createRange(); r.selectNodeContents(p); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); setTimeout(()=>document.getElementById('collectSelection').click(),0);})();");
-				break;
-			case 11:
-				Expect(Get(message, "clue_count", 0).AsInt32() == 3, "启事文字、启事照片和论坛目击文字均由玩家收录。");
-				CompleteTest();
-				break;
+			switch (_step++)
+			{
+				case 0:
+					Expect(page == "home" && message["has_global_search"].AsBool() && !message["has_forum_search"].AsBool(), "从独立夜航搜索首页开始。");
+					Search("web", "暗涌"); break;
+				case 1:
+					Expect(Snapshot()["search_results"].AsGodotArray().Count == 1, "全网搜暗涌只得到网站入口。");
+					Eval("document.querySelector('[data-action=\"open_forum\"]').click()"); break;
+				case 2:
+					Expect(page == "forum" && message["post_count"].AsInt32() == 7 && message["clue_count"].AsInt32() == 0, "无需启事收录即可进入七帖论坛首页。");
+					Expect(message["has_forum_search"].AsBool() && !message["has_global_search"].AsBool(), "论坛是独立文档，只提供站内搜索。");
+					await Capture("forum-home.png"); Search("forum", "猫"); break;
+				case 3:
+					Expect(page == "forum" && message["post_count"].AsInt32() == 1, "站内搜猫得到目击帖。");
+					Eval("document.querySelector('[data-category=\"都市怪谈\"]').click()"); break;
+				case 4:
+					Expect(message["post_count"].AsInt32() == 0 && message["empty_message"].AsString().Contains("没有找到相关帖子"), "不匹配分类显示自然空结果。");
+					Search("forum", ""); break;
+				case 5:
+					Expect(message["post_count"].AsInt32() == 4, "清空关键词恢复怪谈分类列表。");
+					Eval("document.getElementById('forumQuery').value='猫'; document.querySelector('[data-category=\"全部\"]').click()"); break;
+				case 6:
+					Eval("document.querySelector('[data-action=\"open_thread\"]').click()"); break;
+				case 7:
+					Expect(page == "forum_post" && message["forum_image_width"].AsInt32() > 0, "帖子成功显示本地猫照片。");
+					PressNavigation("Back"); break;
+				case 8:
+					Expect(page == "forum" && message["forum_query"].AsString() == "猫", "原生后退恢复站内查询。");
+					PressNavigation("Forward"); break;
+				case 9:
+					Expect(page == "forum_post", "原生前进恢复当前帖子。");
+					await Capture("forum-cat-post.png"); CollectText("threadBody"); break;
+				case 10:
+					Expect(message["clue_count"].AsInt32() == 1, "帖子文字通过真实 DOM 选区收录。");
+					Eval("document.getElementById('threadPhoto').click()"); break;
+				case 11:
+					Expect(message["clue_count"].AsInt32() == 2, "帖子照片通过预览确认后收录。");
+					PressNavigation("Home"); break;
+				case 12:
+					Expect(page == "home", "主页跨文档返回夜航搜索。"); Search("web", "猫"); break;
+				case 13:
+					Expect(Snapshot()["search_results"].AsGodotArray().Count == 3, "全网搜猫仍只有无关网页，不泄露已读猫帖。");
+					Eval("document.querySelector('[data-action=\"open_result\"]').click()"); break;
+				case 14:
+					Expect(page == "web_result", "无关搜索结果能正常打开。");
+					Eval("document.querySelector('[data-page=\"search_results\"]').click()"); break;
+				case 15:
+					Search("web", "年糕"); break;
+				case 16:
+					Eval("document.querySelector('[data-action=\"open_article\"]').click()"); break;
+				case 17:
+					Expect(page == "article" && message["article_image_width"].AsInt32() > 0, "启事加载自己的独立网页和照片。");
+					CollectText("articleBody"); break;
+				case 18:
+					Expect(message["article_text_collected"].AsBool(), "启事文字收录成功。");
+					Eval("document.getElementById('articlePhoto').click()"); break;
+				case 19:
+					Expect(message["article_image_collected"].AsBool() && message["clue_count"].AsInt32() == 4, "两个站点的文字与图片分别收录成四张卡。");
+					FinishRecovery(); break;
+				case 20:
+					Expect(Snapshot()["complete"].AsBool(), "提前逛论坛后仍可完成找猫。");
+					SubmitAddress("anyong.bbs/thread/pet_sighting"); break;
+				case 21:
+					Expect(page == "forum_post" && message["floor_count"].AsInt32() == 5, "完成后重访帖子新增失主领走的收尾楼。");
+					SubmitAddress("https://anyong.bbs/thread/missing"); break;
+			}
 		}
+		catch (Exception exception) { Expect(false, "CEF 验收异常：" + exception); Complete(); }
 	}
 
-	/// <summary>根据测试当前阶段验证搜索词，再让 C++ 返回搜索结果快照。</summary>
-	private void HandleSearch(Dictionary payload)
+	/// <summary>提交真实搜索表单，不直接调用网页内部渲染函数。</summary>
+	private void Search(string prefix, string query) => Eval($"document.getElementById('{prefix}Query').value={Json.Stringify(query)}; document.getElementById('{prefix}Search').requestSubmit()");
+	/// <summary>创建正文选区，点击产品已有的浮动收录按钮。</summary>
+	private void CollectText(string id) => Eval($"(()=>{{const node=document.getElementById('{id}');const range=document.createRange();range.selectNodeContents(node);const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);document.dispatchEvent(new MouseEvent('mouseup',{{bubbles:true}}));document.getElementById('collectSelection').click();}})()");
+	/// <summary>验证真实场景按钮已经连接的原生导航信号。</summary>
+	private void PressNavigation(string name) => _view.GetNode<Button>("Toolbar/Controls/" + name).EmitSignal(Button.SignalName.Pressed);
+	/// <summary>提交原生地址栏，覆盖无协议域名和帖子路径解析。</summary>
+	private void SubmitAddress(string address)
 	{
-		string query = Get(payload, "query", "").AsString();
-		string scope = Get(payload, "scope", "").AsString();
-		if (_step == 0)
+		LineEdit input = _view.GetNode<LineEdit>("Toolbar/Controls/Address");
+		input.Text = address;
+		input.EmitSignal(LineEdit.SignalName.TextSubmitted, address);
+	}
+	/// <summary>通过白板与聊天语义动作完成任务，不直接覆写剧情状态。</summary>
+	private void FinishRecovery()
+	{
+		foreach (Variant item in Snapshot()["clues"].AsGodotArray())
 		{
-			Expect(query == "猫" && scope == "forum", "玩家在尚未收齐启事线索时尝试搜索论坛猫帖。");
-			Dictionary result = Dispatch("search", payload, "search_completed");
-			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
-			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 0,
-				"啟事正文和照片未收錄前不提前洩露論壇目擊帖。");
-			ReturnSnapshot(1);
+			Dictionary clue = item.AsGodotDictionary();
+			if (clue["kind"].AsString() != "text") continue;
+			_state.Call("dispatch_action", "attach_clue", new Dictionary { ["clue_id"] = clue["id"], ["task_id"] = clue["page"].AsString() == "article" ? "cat_look" : "cat_place" });
 		}
-		else if (_step == 1)
+		Dictionary report = _state.Call("dispatch_action", "chat", new Dictionary { ["text"] = "老粮站的花坛" }).AsGodotDictionary();
+		Expect(report["code"].AsString() == "location_confirmed", "真实摘录能完成白板任务并报告位置。");
+		Dictionary result = _state.Call("dispatch_action", "finish_recovery", new Dictionary()).AsGodotDictionary();
+		_view.ApplySnapshot(result["snapshot"].AsGodotDictionary());
+	}
+	/// <summary>可选导出包含原生工具栏和真实 CEF 内容的渲染验收图。</summary>
+	private async Task Capture(string filename, BrowserView? browser = null)
+	{
+		if (!System.Array.Exists(OS.GetCmdlineUserArgs(), argument => argument == "--capture-browser")) return;
+		// DOM 就绪不等于纹理已发布；等待实际纹理包含页面细节，不能把纯色首帧当作成功截图。
+		bool painted = false;
+		for (int attempt = 0; attempt < 60 && !painted; attempt++)
 		{
-			Expect(query == "猫" && scope == "web", "网页提交了全网猫字搜索。");
-			Dictionary result = Dispatch("search", payload, "search_completed");
-			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
-			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 3,
-					"C++ 将猫字泛化搜索判成三个无关结果。");
-			ReturnSnapshot(2);
+			await ToSignal(GetTree().CreateTimer(0.05), SceneTreeTimer.SignalName.Timeout);
+			if ((browser ?? _view).CefSurface!.Get("texture").AsGodotObject() is not Texture2D texture) continue;
+			Image image = texture.GetImage();
+			if (image.GetWidth() < 16 || image.GetHeight() < 16) continue;
+			Color background = image.GetPixel(4, 4);
+			for (int y = 1; y < 10 && !painted; y++)
+				for (int x = 1; x < 14 && !painted; x++)
+					painted = !image.GetPixel(image.GetWidth() * x / 14, image.GetHeight() * y / 10).IsEqualApprox(background);
 		}
-		else if (_step == 4)
+		Expect(painted, "CEF 已发布包含可见网页内容的纹理。");
+		await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+		Expect(GetViewport().GetTexture().GetImage().SavePng("res://artifacts/" + filename) == Error.Ok, "保存浏览器验收图：" + filename);
+	}
+
+	/// <summary>在实际 CRT 桌面中装配浏览器，验证主协调器确实使用新组件和独立网页。</summary>
+	private async void VerifyDesktop()
+	{
+		try
 		{
-			Expect(query == "年糕" && scope == "web", "网页再次搜索了年糕。");
-			DispatchAndReturn("search", payload, "search_completed", 5);
+			_view.Hide();
+			PrologueMain main = GD.Load<PackedScene>("res://main.tscn").Instantiate<PrologueMain>();
+			AddChild(main);
+			main.GetNode<Control>("LockScreen").Hide();
+			main.Call("DispatchAction", "begin", new Dictionary());
+			main.Call("DispatchAction", "search", new Dictionary { ["query"] = "暗涌" });
+			main.Call("DispatchAction", "open_forum", new Dictionary { ["id"] = "anyong" });
+			Panel frame = main.GetNode<Panel>("PrologueDesktop/CRTViewport/ContentViewport/Content/DesktopContent/WindowLayer/browser");
+			BrowserView browser = frame.GetNode<BrowserView>("Body/BrowserContent");
+			TaskCompletionSource<Dictionary> ready = new();
+			browser.PageStateApplied += message => ready.TrySetResult(message);
+			main.Call("ShowWindow", "browser");
+			Dictionary applied = await ready.Task;
+			Expect(applied["page"].AsString() == "forum", "主桌面的真实浏览器也成功加载独立论坛首页。");
+			Expect(browser.GetNode<LineEdit>("Toolbar/Controls/Address").Size.X > 300, "真实窗口中的原生地址栏保持可用宽度。");
+			Expect(browser.GetNode<Control>("BrowserHost").Position.Y >= browser.GetNode<Control>("Toolbar").Size.Y, "CEF 正文与原生导航栏不重叠。");
+			await Capture("forum-desktop.png", browser);
 		}
-		else if (_step == 8)
-		{
-			Expect(query == "猫" && scope == "forum", "收录启事文字和照片后搜索了论坛猫帖。");
-			Dictionary result = Dispatch("search", payload, "search_completed");
-			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
-			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 1,
-					"C++ 只返回一个论坛目击帖。");
-			ReturnSnapshot(9);
-		}
+		catch (Exception exception) { Expect(false, "真实桌面验收异常：" + exception); }
+		Complete();
 	}
-
-	/// <summary>验证正文划选按钮发出的收录请求，并让 C++ 记录玩家的线索卡。</summary>
-	private void HandleClueCollection(Dictionary payload)
-	{
-		string page = Get(payload, "page", "").AsString();
-		Dictionary result = Dispatch("collect_clue", payload, "clue_collected");
-		ReturnSnapshot(page == "article" ? 7 : 11);
-	}
-
-	/// <summary>照片点击先打开原生预览；测试再模拟玩家按下预览中的收录按钮。</summary>
-	private void HandleImagePreview(Dictionary payload)
-	{
-		Expect(Get(payload, "page", "").AsString() == "article", "玩家点击启事照片后网页提交预览请求。");
-		Dictionary result = Dispatch("collect_clue", new Dictionary
-		{
-			["page"] = "article",
-			["kind"] = "image",
-		}, "clue_collected");
-		ReturnSnapshot(8);
-	}
-
-	/// <summary>执行操作并检查业务操作码，避免页面只收到无条件成功回执。</summary>
-	private Dictionary Dispatch(string action, Dictionary payload, string expectedCode)
-	{
-		Dictionary result = _state!.Call("dispatch_action", action, payload).AsGodotDictionary();
-		Expect(Get(result, "code", "").AsString() == expectedCode, action + " 操作通过 C++ 校验。");
-		return result;
-	}
-
-	/// <summary>执行状态操作、保留当前 CEF 页面状态并等待网页确认重绘。</summary>
-	private void DispatchAndReturn(string action, Dictionary payload, string expectedCode, int nextStep)
-	{
-		Dispatch(action, payload, expectedCode);
-		ReturnSnapshot(nextStep);
-	}
-
-	/// <summary>把最新权威快照发回 CEF，修订号用于防止旧异步消息覆盖新画面。</summary>
-	private void ReturnSnapshot(int nextStep)
-	{
-		_step = nextStep;
-		_waitingForState = true;
-		SendSnapshot();
-	}
-
-	/// <summary>在 CEF 主 Frame 执行测试构造的真实页面表单和文本选择交互。</summary>
-	private void Eval(string script)
-	{
-		_browser!.Call("eval", script);
-	}
-
-	/// <summary>将权威进度快照包装成 Godot 到网页的 IPC 消息。</summary>
-	private void SendSnapshot()
-	{
-		Dictionary snapshotMessage = new()
-		{
-			["version"] = 1,
-			["type"] = "state",
-			["page"] = "prologue",
-			["snapshot"] = _state!.Call("get_snapshot").AsGodotDictionary(),
-		};
-		_browser!.Call("send_ipc_message", Json.Stringify(snapshotMessage));
-	}
-
-	/// <summary>每项断言立即写入结果，失败后仍继续运行以收集后续错误。</summary>
+	/// <summary>读取权威快照并通过扩展的脚本执行接口驱动 DOM。</summary>
+	private Dictionary Snapshot() => _state.Call("get_snapshot").AsGodotDictionary();
+	private void Eval(string script) => _view.CefSurface!.Call("eval", script);
+	/// <summary>记录断言并通过进程退出码报告整条流程结果。</summary>
 	private void Expect(bool condition, string message)
 	{
 		if (condition) GD.Print("[PASS] " + message);
-		else Fail(message);
+		else { _failed = true; GD.PushError("[FAIL] " + message); }
 	}
-
-	/// <summary>记录集成失败及原因，最终通过非零退出码通知自动验收流程。</summary>
-	private void Fail(string message)
-	{
-		_failed = true;
-		GD.PushError("[FAIL] " + message);
-	}
-
-	/// <summary>统一结束场景并输出可在日志中搜索的验收标记。</summary>
-	private void CompleteTest()
+	/// <summary>只结束一次验收，失败通过非零退出码报告。</summary>
+	private void Complete()
 	{
 		if (_completed) return;
 		_completed = true;
 		GD.Print(_failed ? "[FAIL] 序章 CEF IPC 集成验收失败。" : "[PASS] 序章 CEF IPC 集成验收通过。");
 		GetTree().Quit(_failed ? 1 : 0);
-	}
-
-	/// <summary>读取 Godot 无类型 Dictionary 字段，兼容缺字段时的安全默认值。</summary>
-	private static Variant Get(Dictionary dictionary, string key, Variant fallback)
-	{
-		return dictionary.ContainsKey(key) ? dictionary[key] : fallback;
 	}
 }

@@ -2,7 +2,8 @@
   "pet": {
     "species": "猫",
     "name": "年糕",
-    "description": "半岁的小橘猫，四爪白，脖子上系旧红绳，绳上挂一个小铜铃铛"
+    "description": "半岁的小橘猫，四爪白，脖子上系旧红绳，绳上挂一个小铜铃铛",
+    "forum_post_id": "pet_sighting"
   },
   "article": {
     "id": "lostcat",
@@ -11,40 +12,386 @@
     "short_source": "城南后街 · 街坊告示",
     "image": "res://content/assets/prop_cat_home.png",
     "image_caption": "上个月在屋里拍的，年糕趴在沙发上",
-    "body": "寻 猫 启 事\n走失时间：10 月 15 日傍晚\n走失地点：后街 · 老粮站一带\n名字：年糕（叫它不一定应）\n特征：半岁小橘猫，四爪白，脖子上系一根旧红绳，绳上一个小铜铃铛。\n性子怕生，不咬人，见了生人会先躲。\n照片是上个月在屋里拍的，认得这身花色就行。\n它是孙女留下的猫。谁看见了，麻烦言语一声。\n后街 12 号，王秀兰（女儿替着发到网上）"
+    "body": "寻 猫 启 事\n走失时间：10 月 15 日傍晚\n走失地点：后街 · 老粮站一带\n名字：年糕（叫它不一定应）\n特征：半岁小橘猫，四爪白，脖子上系一根旧红绳，绳上一个小铜铃铛。\n性子怕生，不咬人，见了生人会先躲。\n照片是上个月在屋里拍的，认得这身花色就行。\n它是孙女留下的猫。谁看见了，麻烦言语一声。\n后街 12 号，王秀兰（女儿替着发到网上）",
+    "url": "https://notice.yehang.os/lostcat",
+    "page_resource": "res://content/web/article.html"
   },
   "forum": {
-    "id": "pet_sighting",
-    "title": "南山路口捡到一只小橘猫，脖子上系着红绳，谁家丢的？",
-    "description": "下午两点多，猫蹲在老粮站门口的花坛上。",
-    "short_source": "暗涌 · 南山路口捡猫帖",
-    "image": "res://content/assets/prop_cat.png",
-    "image_caption": "下午拍的，它就蹲在那儿不动。",
-    "body": "今天下午两点多，我路过南山路口，老粮站门口那个花坛上蹲着这么一只。\n脖子上系着根红绳，还挂了个小铃铛。一看就是家养的，不是野猫。\n我蹲下来叫它，它也不跑，就是盯着我看。喂了半根火腿肠，吃得挺急。\n谁家丢的赶紧来领。我下午还在附近，天黑了就不一定了。"
+    "id": "anyong",
+    "site": "暗涌",
+    "title": "「暗涌」· 推理爱好者论坛",
+    "url": "https://anyong.bbs/",
+    "slogan": "ANYONG / 推理 · 怪谈 · 灌水",
+    "description": "推理谜题、悬案讨论、都市怪谈、本地见闻。本市推理爱好者的小据点。",
+    "page_resource": "res://content/web/forum.html",
+    "search_keywords": [
+      "暗涌",
+      "论坛",
+      "推理论坛",
+      "推理社",
+      "bbs",
+      "帖子",
+      "讨论"
+    ],
+    "search_excluded_terms": ["「暗涌」", "暗涌", "推理爱好者论坛", "论坛", "anyong.bbs", "bbs"],
+    "categories": [
+      "全部",
+      "招募",
+      "推理",
+      "都市怪谈",
+      "本地",
+      "灌水"
+    ],
+    "posts": [
+      {
+        "id": "rules",
+        "title": "【公告】欢迎来到「暗涌」· 新人必读 & 版规",
+        "category": "公告",
+        "author": "老井",
+        "time": "3 个月前",
+        "pinned": true,
+        "replies": 42,
+        "views": 8812,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/rules",
+        "short_source": "暗涌 · 【公告】欢迎来到「暗涌」· 新人必读 & 版规",
+        "description": "这里是一群推理爱好者凑起来的小地方。 本版欢迎：推理谜题、悬案讨论、都市怪谈、本地见闻。 禁止：人肉、造谣、剧透未标注的谜题答案。 新注册的会员，初始密码统一是 123456，登录后自",
+        "body": "这里是一群推理爱好者凑起来的小地方。\n\n本版欢迎：推理谜题、悬案讨论、都市怪谈、本地见闻。\n禁止：人肉、造谣、剧透未标注的谜题答案。\n\n新注册的会员，初始密码统一是 123456，登录后自己改掉。\n\n**长期不登录的号，站里会统一重置密码**。重置过的号，只能找本人要。\n\n站内信不另设入口：想问谁，**点一下他的头像就能私聊**（登着号才发得出去）。\n\n玩得开心。",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "城南老张",
+            "time": "3 个月前",
+            "text": "版主辛苦。这版总算有个正经规矩了。"
+          },
+          {
+            "author": "夜行灯",
+            "time": "3 个月前",
+            "text": "前排报到。老人说过：暗涌之下，皆有回响。"
+          },
+          {
+            "author": "三点半",
+            "time": "3 个月前",
+            "text": "报到。怪谈区我来蹲了，夜里三点半准时上线。"
+          },
+          {
+            "author": "咸鱼老王",
+            "time": "2 个月前",
+            "text": "新人 +1，请多指教。"
+          }
+        ]
+      },
+      {
+        "id": "funeral",
+        "title": "殡仪馆夜班的几条老规矩，你们听过几条？",
+        "category": "都市怪谈",
+        "author": "夜行灯",
+        "time": "6 天前",
+        "pinned": false,
+        "replies": 88,
+        "views": 2140,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/funeral",
+        "short_source": "暗涌 · 殡仪馆夜班的几条老规矩，你们听过几条？",
+        "description": "我自己在殡仪馆上了三年夜班，听老人说过几条规矩： 一，走廊里听见有人喊你名字，别回头。 二，清点的时候不要数出声，心里数。 三，凌晨三点到四点那段，别一个人待在冷藏间外面。 问我为什么",
+        "body": "我自己在殡仪馆上了三年夜班，听老人说过几条规矩：\n一，走廊里听见有人喊你名字，别回头。\n二，清点的时候不要数出声，心里数。\n三，凌晨三点到四点那段，别一个人待在冷藏间外面。\n问我为什么，我也说不清。规矩就是规矩。\n你们那儿有没有类似的规矩？",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "咸鱼老王",
+            "time": "6 天前",
+            "text": "封建迷信，散了吧。"
+          },
+          {
+            "author": "夜行灯",
+            "time": "5 天前",
+            "text": "楼上这话，你细品。"
+          }
+        ]
+      },
+      {
+        "id": "ghost",
+        "title": "借个寿！！",
+        "category": "都市怪谈",
+        "author": "三点半",
+        "time": "3 天前",
+        "pinned": false,
+        "replies": 26,
+        "views": 733,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/ghost",
+        "short_source": "暗涌 · 借个寿！！",
+        "description": "最近到处都在传这个。 说是半夜两点多，门外有人喊「寿来」。喊三声，没人应，他就走了。应了一声，寿就短一截。 我是不信的，先替大家试。 寿来！寿来！寿来！",
+        "body": "最近到处都在传这个。\n说是半夜两点多，门外有人喊「寿来」。喊三声，没人应，他就走了。应了一声，寿就短一截。\n我是不信的，先替大家试。\n寿来！寿来！寿来！",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "匿名用户",
+            "time": "3 天前",
+            "text": "寿回！寿回！寿回！"
+          },
+          {
+            "author": "城南老张",
+            "time": "3 天前",
+            "text": "老辈子讲借寿啊，是拿纸扎替的，没这么喊的。你们学点什么不好呢。"
+          },
+          {
+            "author": "咸鱼老王",
+            "time": "2 天前",
+            "text": "就是个梗嘛。上个月别的论坛刷了三天，又传到这儿来了。"
+          },
+          {
+            "author": "守夜人",
+            "time": "2 天前",
+            "text": "你们在这儿瞎凑什么热闹啊。\n都是封建迷信。我在这一行干了快二十年了，也没听说过这些事。"
+          },
+          {
+            "author": "三点半",
+            "time": "2 天前",
+            "text": "守夜人　寿来！寿来！寿来！"
+          },
+          {
+            "author": "匿名用户",
+            "time": "2 天前",
+            "text": "寿来！寿来！"
+          },
+          {
+            "author": "风过无痕",
+            "time": "1 天前",
+            "text": "楼上两位，喊别人名字不太好吧。"
+          },
+          {
+            "author": "三点半",
+            "time": "1 天前",
+            "text": "「守夜人」那位怎么不吭声了？"
+          },
+          {
+            "author": "匿名用户",
+            "time": "1 天前",
+            "text": "喊了他两天，一个字没回。\n\n不会真出事了吧。"
+          },
+          {
+            "author": "咸鱼老王",
+            "time": "1 天前",
+            "text": "人家做白事的，忙起来一天不看手机。别瞎想啊。"
+          }
+        ]
+      },
+      {
+        "id": "lift",
+        "title": "老城区那栋楼，废弃的电梯会自己停在四楼",
+        "category": "都市怪谈",
+        "author": "风过无痕",
+        "time": "4 天前",
+        "pinned": false,
+        "replies": 51,
+        "views": 1180,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/lift",
+        "short_source": "暗涌 · 老城区那栋楼，废弃的电梯会自己停在四楼",
+        "description": "老城区那栋写字楼，电梯停用三四年了，闸门是锁死的。 但我上夜班回来路过，好几次看见楼层指示灯亮着四楼。 这周一我又看到一次。我特意数了，从一楼升上去，停在四楼，隔了大概两分钟，又自己下",
+        "body": "老城区那栋写字楼，电梯停用三四年了，闸门是锁死的。\n但我上夜班回来路过，好几次看见楼层指示灯亮着四楼。\n这周一我又看到一次。我特意数了，从一楼升上去，停在四楼，隔了大概两分钟，又自己下来了。\n有没有住那附近的？",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "咸鱼老王",
+            "time": "4 天前",
+            "text": "备用电源没断吧。"
+          },
+          {
+            "author": "风过无痕",
+            "time": "4 天前",
+            "text": "那栋楼的电早断了啊。"
+          }
+        ]
+      },
+      {
+        "id": "fog",
+        "title": "山沟那边的雾，是不是有点不对劲。",
+        "category": "都市怪谈",
+        "author": "夜行灯",
+        "time": "6 小时前",
+        "pinned": false,
+        "replies": 12,
+        "views": 180,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/fog",
+        "short_source": "暗涌 · 山沟那边的雾，是不是有点不对劲。",
+        "description": "山沟那边的雾，最近越来越重。我家就在山脚下，晚上开窗，雾能飘进屋。 而且说实话有点邪门。我家那条狗，最近一到夜里就冲着后山叫，怎么都不肯出门。 住附近的，来交流一下。",
+        "body": "山沟那边的雾，最近越来越重。我家就在山脚下，晚上开窗，雾能飘进屋。\n而且说实话有点邪门。我家那条狗，最近一到夜里就冲着后山叫，怎么都不肯出门。\n住附近的，来交流一下。",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "匿名用户",
+            "time": "5 小时前",
+            "text": "别去后山。真的，别去。"
+          }
+        ]
+      },
+      {
+        "id": "ball",
+        "title": "半夜楼上「咚、咚」掉弹珠的声音，到底是谁家在玩？",
+        "category": "灌水",
+        "author": "咸鱼老王",
+        "time": "1 天前",
+        "pinned": false,
+        "replies": 96,
+        "views": 1830,
+        "forum_only": false,
+        "url": "https://anyong.bbs/thread/ball",
+        "short_source": "暗涌 · 半夜楼上「咚、咚」掉弹珠的声音，到底是谁家在玩？",
+        "description": "老问题了，但我还是想问。 楼上住的是俩老人，孙子半年才来一次。可那声音，弹珠掉地上，弹两下，停住。 一晚上能来个三四回。白天什么都没有。 你们楼上有吗？",
+        "body": "老问题了，但我还是想问。\n楼上住的是俩老人，孙子半年才来一次。可那声音，弹珠掉地上，弹两下，停住。\n一晚上能来个三四回。白天什么都没有。\n你们楼上有吗？",
+        "image": "",
+        "image_caption": "",
+        "floors": [
+          {
+            "author": "夜行灯",
+            "time": "1 天前",
+            "text": "老房子钢筋热胀冷缩，正常啊。"
+          },
+          {
+            "author": "匿名用户",
+            "time": "20 小时前",
+            "text": "我们家那栋楼，上一任住户也这么说。"
+          }
+        ]
+      },
+      {
+        "id": "pet_sighting",
+        "title": "南山路口捡到一只小橘猫，脖子上系着红绳，谁家丢的？",
+        "category": "本地",
+        "author": "小满",
+        "time": "1 小时前",
+        "pinned": false,
+        "replies": 9,
+        "views": 132,
+        "forum_only": true,
+        "url": "https://anyong.bbs/thread/pet_sighting",
+        "short_source": "暗涌 · 南山路口捡猫帖",
+        "description": "今天下午两点多，我路过南山路口，老粮站门口那个花坛上蹲着这么一只。 脖子上系着根红绳，还挂了个小铃铛。一看就是家养的，不是野猫。 我蹲下来叫它，它也不跑，就是盯着我看。喂了半根火腿肠，",
+        "body": "今天下午两点多，我路过南山路口，老粮站门口那个花坛上蹲着这么一只。\n脖子上系着根红绳，还挂了个小铃铛。一看就是家养的，不是野猫。\n我蹲下来叫它，它也不跑，就是盯着我看。喂了半根火腿肠，吃得挺急。\n谁家丢的赶紧来领。我下午还在附近，天黑了就不一定了。",
+        "image": "res://content/assets/prop_cat.png",
+        "image_caption": "下午拍的，它就蹲在那儿不动。",
+        "floors": [
+          {
+            "author": "三点半",
+            "time": "2 小时前",
+            "text": "大白天捡猫。会不会是猫妖啊。"
+          },
+          {
+            "author": "风过无痕",
+            "time": "1 小时前",
+            "text": "这么可爱，别乱说啊。"
+          },
+          {
+            "author": "小满",
+            "time": "1 小时前",
+            "text": "楼上两位先别聊妖怪了，帮我想想谁家丢了猫啊。"
+          },
+          {
+            "author": "咸鱼老王",
+            "time": "40 分钟前",
+            "text": "南山路口那一片老房子多，养猫的人家不少呢。"
+          },
+          {
+            "author": "小满",
+            "time": "刚刚",
+            "text": "找到了。\n\n猫主人来领走了。说是跑出去两天，躲在老粮站后头那片棚子里，饿了，一见人就往怀里钻。\n\n谢谢各位帮着出主意。",
+            "requires_complete": true
+          }
+        ]
+      }
+    ]
   },
   "quest": {
     "id": "q_cat",
     "title": "找到年糕",
     "note": "后街王阿姨托的事",
     "tasks": [
-      { "id": "cat_look", "title": "明确猫的样子", "keywords": ["四爪白", "红绳", "铃铛"] },
-      { "id": "cat_place", "title": "明确猫在哪儿", "keywords": ["花坛"] }
+      {
+        "id": "cat_look",
+        "title": "明确猫的样子",
+        "keywords": [
+          "四爪白",
+          "红绳",
+          "铃铛"
+        ]
+      },
+      {
+        "id": "cat_place",
+        "title": "明确猫在哪儿",
+        "keywords": [
+          "花坛"
+        ]
+      }
     ]
   },
   "search": {
-    "broad_queries": ["猫"],
+    "broad_queries": [
+      "猫"
+    ],
     "broad_results": [
-      { "id": "noise_hospital", "kind": "web", "title": "城南宠物医院夜间门诊", "description": "猫咪体检、驱虫与急诊。" },
-      { "id": "noise_food", "kind": "web", "title": "猫粮促销：幼猫粮第二件半价", "description": "本周宠物用品特价。" },
-      { "id": "noise_cafe", "kind": "web", "title": "南巷猫咖预约", "description": "周末座位预约与领养活动。" }
-    ]
+      {
+        "id": "noise_hospital",
+        "kind": "web",
+        "title": "城南宠物医院夜间门诊",
+        "description": "猫咪体检、驱虫与急诊。",
+        "url": "https://life.yehang.os/noise_hospital"
+      },
+      {
+        "id": "noise_food",
+        "kind": "web",
+        "title": "猫粮促销：幼猫粮第二件半价",
+        "description": "本周宠物用品特价。",
+        "url": "https://life.yehang.os/noise_food"
+      },
+      {
+        "id": "noise_cafe",
+        "kind": "web",
+        "title": "南巷猫咖预约",
+        "description": "周末座位预约与领养活动。",
+        "url": "https://life.yehang.os/noise_cafe"
+      }
+    ],
+    "url": "https://search.yehang.os/",
+    "title": "夜航搜索",
+    "page_resource": "res://content/web/search.html"
   },
   "matching": {
-    "article_search_keywords": ["年糕", "寻猫", "启事", "后街", "丢猫"],
-    "forum_search_keywords": ["猫", "南山", "花坛", "粮站", "捡到"],
-    "location_keywords": ["花坛", "花池", "花台", "花圃"],
-    "rough_location_keywords": ["粮站", "南山路口", "南山", "后街", "那一带", "附近", "周边"],
-    "location_question_keywords": ["地址", "位置", "哪儿", "哪里"]
+    "article_search_keywords": [
+      "年糕",
+      "寻猫",
+      "启事",
+      "后街",
+      "丢猫"
+    ],
+    "location_keywords": [
+      "花坛",
+      "花池",
+      "花台",
+      "花圃"
+    ],
+    "rough_location_keywords": [
+      "粮站",
+      "南山路口",
+      "南山",
+      "后街",
+      "那一带",
+      "附近",
+      "周边"
+    ],
+    "location_question_keywords": [
+      "地址",
+      "位置",
+      "哪儿",
+      "哪里"
+    ]
   },
   "dialogue": {
     "intro": [

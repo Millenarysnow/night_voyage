@@ -18,6 +18,7 @@
   "type": "action",
   "request_id": "web-1730000000000",
   "page": "prologue",
+  "resource": "res://content/web/search.html",
   "action": "search",
   "payload": {
     "scope": "web",
@@ -30,6 +31,7 @@
 - `type`：固定为 `action`。
 - `request_id`：网页为每次操作生成的字符串。当前 Godot 投影层不依赖它匹配响应，但保留该字段供后续异步请求追踪。
 - `page`：发起操作的页面标识，序章网页固定为 `prologue`。
+- `resource`：发起操作的本地文档路径。`BrowserView` 只接受当前文档的消息，切换站点后丢弃旧文档的延迟消息。
 - `action`：语义操作名。网页不能通过它直接写入阶段或进度。
 - `payload`：操作参数；所有剧情判断由 C++ 状态机完成。
 
@@ -38,11 +40,15 @@
 | 操作 | 作用 | 关键参数 |
 | --- | --- | --- |
 | `begin` | 开始序章聊天 | 无 |
-| `search` | 提交搜索 | `scope: web/forum`、`query` |
+| `search` | 夜航全网搜索 | `scope: web`（可省略）、非空 `query` |
+| `forum_search` | 暗涌页面内筛选帖子 | `query`（允许为空）、`category`（省略则保留当前值） |
 | `open_article` | 打开寻猫启事 | `id` |
-| `open_forum` | 打开论坛目击帖 | `id` |
+| `open_forum` | 进入论坛首页，清空站内筛选 | 站点 `id: anyong` |
+| `open_thread` | 打开具体帖子 | 帖子 `id`，如 `pet_sighting` |
 | `open_result` | 打开泛搜中的普通网页 | `id` |
-| `browser_navigate` | 返回搜索结果或首页 | `page: search_results/forum_results/home` |
+| `browser_navigate` | 站内返回或进入搜索首页 | `page: search_results/forum/home` |
+| `browser_address` | 地址栏打开站点或搜索普通词 | `address` |
+| `browser_back` / `browser_forward` | 恢复浏览历史与查询上下文 | 无 |
 | `preview_image` | 请求 Godot 显示图片灯箱 | `page: article/forum_post` |
 | `collect_clue` | 将玩家选中的文字或图片收进白板 | `page`、`kind: text/image`、文字型还需 `text` |
 
@@ -75,6 +81,10 @@ Godot 当前向网页发送完整状态快照，而不是逐项拼接页面字�
 
 网页收到 `type: state` 后只根据 `snapshot.page` 重画当前页面。`snapshot.content` 是由项目内容 JSON 注入的只读页面投影，网页不得改写后回传为进度。
 
+浏览器的原生外壳位于 `browser_window_content.tscn`，由 `BrowserView.cs` 连接地址栏和导航按钮。C++ 快照中的 `browser_resource` 指定应加载的独立本地网页：夜航搜索 `content/web/search.html`、暗涌 `content/web/forum.html`、街坊告示 `content/web/article.html`。`browser_url` 和 `browser_title` 是游戏内显示的网址与标题，不会请求真实外网。切换文档后，目标网页发送 `type: browser:ready` 和自己的 `resource`，组件才回传最新快照。
+
+`search_query/search_results` 只保存全网搜索；`forum_query/forum_category/forum_results` 独立保存站内筛选。`active_post_id/active_post` 指定当前帖子及其可见楼层。`can_go_back/can_go_forward` 投影导航能力。历史只恢复页面，不撤销已收录线索、已读标记或任务进度。
+
 `revision` 在 C++ 状态发生变化时单调递增。失败操作、幂等的重复收录和 `snapshot` 请求不会推进修订号。接收方应保存已应用的修订号，丢弃更旧的快照，避免 CEF 异步消息乱序覆盖新画面。
 
 ## 网页到 Godot：状态应用回执
@@ -84,6 +94,8 @@ Godot 当前向网页发送完整状态快照，而不是逐项拼接页面字�
 ```json
 {
   "type": "browser:state_applied",
+  "resource": "res://content/web/article.html",
+  "revision": 7,
   "page": "article",
   "clue_count": 1,
   "article_text_collected": true,
@@ -96,11 +108,15 @@ Godot 当前向网页发送完整状态快照，而不是逐项拼接页面字�
 
 该回执不是剧情操作，不能改变游戏状态；生产界面可以忽略它。`article_image_width` 和 `forum_image_width` 为当前 DOM 图片的自然宽度，数值为零表示图片尚未解码或当前页面没有该图片。`empty_message` 是当前搜索结果为空时页面显示的说明文字，正常有结果时为空字符串。
 
+回执还携带 `url/title`、`post_count/floor_count`、`forum_query/forum_category` 和 `has_global_search/has_forum_search`，供验收确认站点身份、楼层投影与搜索范围。网页异常会发送 `browser:error`，组件显示实际错误，不静默换站。
+
 ## 规则边界
 
-序章要求玩家先搜索并打开启事，主动收下启事文字和照片后才能在论坛搜索目击帖。白板任务由 Godot 原生拖放，C++ 根据线索文字关键词裁决子任务；完成“明确猫的样子”和“明确猫在哪儿”后，玩家还要在聊天中报告具体位置。只说“老粮站”或“南山路口”会追问范围，只有“花坛”等具体位置才会开始找回流程。
+序章通常按“搜索年糕→启事收录→林越推荐暗涌→全网搜索暗涌→论坛站内搜猫→帖子收录”推进。论坛和猫帖从开局即可浏览；启事收录只控制推荐对白，不控制网站与帖子是否存在。猫帖的 `forum_only: true` 始终排除全网搜索。站内搜索匹配标题、作者、正文、分类及可见回复，`no_search` 楼层不参与检索；`requires_complete` 的收尾楼只在找猫交接完成后出现。
 
-重复收集同一页面、同一类型、同一文字的线索是幂等操作，不会生成重复卡片。准确位置确认后进入 `returning` 状态；`finish_recovery` 完成交接并把已挂接的线索卡拆回白板自由区，主任务进入 `complete`。
+白板任务由 Godot 原生拖放，C++ 根据线索文字关键词裁决子任务；完成“明确猫的样子”和“明确猫在哪儿”后，玩家还要在聊天中报告具体位置。只说“老粮站”或“南山路口”会追问范围，只有“花坛”等具体位置才会开始找回流程。
+
+重复收集同一来源、同一类型、同一文字的线索是幂等操作，不会生成重复卡片。论坛卡片额外保存 `post_id` 区分不同帖子的来源。准确位置确认后进入 `returning` 状态；`finish_recovery` 完成交接并把已挂接的线索卡拆回白板自由区，主任务进入 `complete`。
 
 ## 输入与坐标
 
