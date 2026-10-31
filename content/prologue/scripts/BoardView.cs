@@ -51,8 +51,8 @@ public partial class BoardView : Control
 	private string _snapshotSignature = "";
 	private string _viewSignature = "";
 	private string _selectedClueId = "";
-	private int _layoutGeneration;
 	private Dictionary? _pendingSnapshot;
+	private bool _measuredLayoutQueued;
 
 	/// <summary>从场景读取工具栏、画布图层和复用模板容器。</summary>
 	public override void _Ready()
@@ -64,6 +64,10 @@ public partial class BoardView : Control
 		_clueLayer = _world.GetNode<Control>("ClueLayer");
 		_questTitle = _world.GetNode<RichTextLabel>("TreeTitle/QuestTitle");
 		_treeTitle = _world.GetNode<Control>("TreeTitle");
+		_treeTitle.Resized += QueueMeasuredLayout;
+		_treeTitle.MinimumSizeChanged += QueueMeasuredLayout;
+		VisibilityChanged += QueueMeasuredLayout;
+		_canvas.Resized += QueueMeasuredLayout;
 		_questStatus = _world.GetNode<Label>("QuestStatus");
 		_countLabel = GetNode<Label>("Toolbar/Buttons/Count");
 		_zoomLabel = GetNode<Label>("Toolbar/Buttons/ZoomValue");
@@ -122,7 +126,6 @@ public partial class BoardView : Control
 		}
 		_pendingSnapshot = null;
 		_snapshotSignature = nextSignature;
-		_layoutGeneration++;
 		_segments.Clear();
 
 		bool questComplete = PrologueMain.Get(quest, "complete", false).AsBool();
@@ -153,6 +156,8 @@ public partial class BoardView : Control
 				zone.Name = taskId;
 				_taskLayer!.AddChild(zone);
 				_tasks.Add(taskId, zone);
+				zone.Resized += QueueMeasuredLayout;
+				zone.MinimumSizeChanged += QueueMeasuredLayout;
 			}
 			zone.Configure(taskId, PrologueMain.Get(task, "title", "").AsString(),
 				PrologueMain.Get(task, "done", false).AsBool());
@@ -190,6 +195,7 @@ public partial class BoardView : Control
 				card.RemovalRequested += RemoveCard;
 				_clueLayer!.AddChild(card);
 				_cards.Add(clueId, card);
+				card.Resized += QueueMeasuredLayout;
 			}
 			card.Configure(clue);
 			card.ResetCardSize();
@@ -208,7 +214,7 @@ public partial class BoardView : Control
 		if (!_cards.ContainsKey(_selectedClueId)) _selectedClueId = "";
 
 		PlaceBoardContents(quest, questComplete);
-		CallDeferred(MethodName.FinishDeferredLayout, _layoutGeneration);
+		QueueMeasuredLayout();
 	}
 
 	/// <summary>卡片松手后应用暂存刷新；手势动作生成了更新快照时暂存值已在 Configure 清空。</summary>
@@ -217,10 +223,21 @@ public partial class BoardView : Control
 		if (_pendingSnapshot != null) Configure(_pendingSnapshot);
 	}
 
-	/// <summary>在主线程下一拍量取控件的最终最小尺寸，再排列卡片并更新全览边界。</summary>
-	private void FinishDeferredLayout(int generation)
+	/// <summary>合并布局请求；隐藏控件尚未排版，等显示及实际尺寸变化后再量取连接端点。</summary>
+	private void QueueMeasuredLayout()
 	{
-		if (generation != _layoutGeneration || !IsInsideTree()) return;
+		if (_measuredLayoutQueued || !IsInsideTree() || !IsVisibleInTree() || _lastQuest.Count == 0) return;
+		_measuredLayoutQueued = true;
+		CallDeferred(MethodName.FinishMeasuredLayout);
+	}
+
+	/// <summary>按当前可见控件的真实尺寸刷新任务树；尺寸后续再次变化时通过信号重新请求。</summary>
+	private void FinishMeasuredLayout()
+	{
+		_measuredLayoutQueued = false;
+		if (!IsInsideTree() || !IsVisibleInTree()) return;
+		foreach (ClueCardView card in _cards.Values)
+			if (card.IsGestureActive) return;
 		foreach (ClueCardView card in _cards.Values) card.ResetCardSize();
 		PlaceBoardContents(_lastQuest, _lastQuestComplete);
 	}
@@ -480,6 +497,9 @@ public partial class BoardView : Control
 			card.SetSelected(id == clueId);
 			card.ZIndex = id == clueId ? 100 : 2;
 		}
+		// 与窗口遵循同样的原则：选中卡片的输入顺序也跟随它的前景绘制顺序。
+		if (_cards.TryGetValue(clueId, out ClueCardView? selected))
+			_clueLayer!.MoveChild(selected, _clueLayer.GetChildCount() - 1);
 	}
 
 	/// <summary>将当前选中的卡片移动到画布中心，便于快速检查较远处的摘录。</summary>

@@ -204,48 +204,13 @@ public partial class BoardCanvasView : Control
 	{
 		if (@event is InputEventMouseButton button)
 		{
-			if (button.Pressed && button.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
-			{
-				Vector2 pointer = button.Position;
-				if (button.AltPressed || button.ShiftPressed)
-				{
-					RotateAt(button.ButtonIndex == MouseButton.WheelUp ? -4.0f : 4.0f, pointer);
-				}
-				else
-				{
-					ZoomAt(button.ButtonIndex == MouseButton.WheelUp ? WheelZoomStep : 1.0f / WheelZoomStep, pointer);
-				}
-				AcceptEvent();
-				return;
-			}
-
 			if (button.ButtonIndex is MouseButton.Left or MouseButton.Middle)
 			{
 				if (button.Pressed)
 				{
-					GrabFocus();
-					BackgroundPressed?.Invoke();
-					if (button.ButtonIndex == MouseButton.Left && button.DoubleClick && !button.CtrlPressed)
-					{
-						FitContent();
-						AcceptEvent();
-						return;
-					}
-
-					_lastPointer = button.Position;
-					_activePointerButton = button.ButtonIndex;
-					if (button.ButtonIndex == MouseButton.Left && button.CtrlPressed)
-					{
-						_pointerMode = PointerMode.Marquee;
-						_marqueeStart = button.Position;
-						UpdateMarquee(button.Position);
-						_marquee!.Visible = true;
-					}
-					else
-					{
-						_pointerMode = PointerMode.Pan;
-						MarkManualView();
-					}
+					// 正常 GUI 路由下 _Input 已先开启手势；只有它没有收到事件时才由此兜底，避免重复触发。
+					if (_pointerMode != PointerMode.None) return;
+					BeginPointerGesture(button, button.Position);
 					AcceptEvent();
 					return;
 				}
@@ -258,6 +223,19 @@ public partial class BoardCanvasView : Control
 	/// <summary>手势在全局输入阶段持续跟踪，使平移和框选跨过卡片时仍可完成。</summary>
 	public override void _Input(InputEvent @event)
 	{
+		// CRT 插件将事件直接推入内容子视口时，控件 GUI 阶段可能不会发出 _GuiInput。
+		// 因此在全局输入阶段按当前悬停控件开启手势，确保真实桌面和普通白板场景使用同一条路径。
+		if (@event is InputEventMouseButton { Pressed: true } press &&
+			press.ButtonIndex is MouseButton.Left or MouseButton.Middle && _pointerMode == PointerMode.None)
+		{
+			Control? hovered = GetViewport().GuiGetHoveredControl();
+			if (IsCanvasBackground(hovered))
+			{
+				BeginPointerGesture(press, ToCanvasLocal(press.Position));
+				GetViewport().SetInputAsHandled();
+				return;
+			}
+		}
 		// 正文可选字控件会截住 GUI 冒泡，因此滚轮在输入阶段统一处理。
 		// 只接受本画布当前悬停的控件，防止白板盖在浏览器下面时抢走滚轮。
 		if (@event is InputEventMouseButton { Pressed: true } wheel &&
@@ -311,6 +289,46 @@ public partial class BoardCanvasView : Control
 			if (releasedMode == PointerMode.Pan) CommitView();
 			// GUI 仍需要这次释放事件解除画布自己的鼠标捕获。
 		}
+	}
+
+	/// <summary>统一初始化空白处的平移、框选和双击全览手势，避免 GUI 与 CRT 路由产生两份状态。</summary>
+	private void BeginPointerGesture(InputEventMouseButton button, Vector2 pointer)
+	{
+		GrabFocus();
+		BackgroundPressed?.Invoke();
+		if (button.ButtonIndex == MouseButton.Left && button.DoubleClick && !button.CtrlPressed)
+		{
+			FitContent();
+			return;
+		}
+
+		_lastPointer = pointer;
+		_activePointerButton = button.ButtonIndex;
+		if (button.ButtonIndex == MouseButton.Left && button.CtrlPressed)
+		{
+			_pointerMode = PointerMode.Marquee;
+			_marqueeStart = pointer;
+			UpdateMarquee(pointer);
+			_marquee!.Visible = true;
+		}
+		else
+		{
+			_pointerMode = PointerMode.Pan;
+			MarkManualView();
+		}
+	}
+
+	/// <summary>只有画布空白或其背景节点才可开始平移，卡片、任务区和文本编辑控件保留各自交互。</summary>
+	private bool IsCanvasBackground(Control? hovered)
+	{
+		if (!IsVisibleInTree() || hovered == null) return false;
+		if (hovered == this) return true;
+		for (Node? node = hovered; node != null && node != this; node = node.GetParent())
+		{
+			if (node is ClueCardView or TaskDropZoneView or TextEdit or LineEdit or Button)
+				return false;
+		}
+		return IsAncestorOf(hovered);
 	}
 
 	/// <summary>画布尺寸变化后保持世界原点位于画布中心，并在自动模式下重做全览。</summary>

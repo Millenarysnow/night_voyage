@@ -28,6 +28,8 @@ public partial class PrologueMain : Control
 	private const string FatalErrorScenePath = "res://content/prologue/scenes/error_message.tscn";
 	private const int ModalZIndex = 3000;
 	private const int MaximumWindowZIndex = 900;
+	// 每个窗口预留足够容纳内部卡片选中层的区间，防止后方窗口的高 Z 子控件盖住前窗。
+	private const int WindowZStride = 128;
 
 	/// <summary>单个应用窗口及其场景化任务栏按钮的运行时句柄。</summary>
 	private sealed class WindowRecord
@@ -103,6 +105,12 @@ public partial class PrologueMain : Control
 	/// <summary>统一处理窗口聚焦和标题栏拖动；窗口的尺寸与布局来自应用场景。</summary>
 	public override void _Input(InputEvent @event)
 	{
+		// 根视口仍会先收到全局输入；模态层打开时不能顺便聚焦或拖动后面的应用窗口。
+		if (_lockOverlay?.IsVisibleInTree() == true || _imageOverlay?.IsVisibleInTree() == true)
+		{
+			_draggingWindow = null;
+			return;
+		}
 		if (@event is InputEventMouseMotion motion && _draggingWindow != null)
 		{
 			Vector2 next = _dragWindowOrigin + motion.Position - _dragPointerOrigin;
@@ -445,17 +453,23 @@ public partial class PrologueMain : Control
 		else ShowWindow(id);
 	}
 
-	/// <summary>提升窗口层级并通过场景按钮的颜色状态标明当前应用。</summary>
+	/// <summary>同时提升绘制层级与场景顺序，保证视觉前景和 Godot GUI 输入命中一致。</summary>
 	private void FocusWindow(string id)
 	{
 		if (!_windows.TryGetValue(id, out WindowRecord? record)) return;
-		if (_windowZ >= MaximumWindowZIndex)
+		if (_windowZ + WindowZStride > MaximumWindowZIndex)
 		{
 			_windowZ = 18;
-			foreach (WindowRecord ordered in GetWindowsOrderedByZ()) ordered.Frame.ZIndex = _windowZ += 2;
+			foreach (WindowRecord ordered in GetWindowsOrderedByZ()) ordered.Frame.ZIndex = _windowZ += WindowZStride;
 		}
-		_windowZ += 2;
+		_windowZ += WindowZStride;
 		record.Frame.ZIndex = _windowZ;
+		// Control 的命中按兄弟节点逆序搜索，不依据 ZIndex；只改 Z 会产生“前窗显示、后窗收输入”。
+		Node layer = record.Frame.GetParent();
+		layer.MoveChild(record.Frame, layer.GetChildCount() - 1);
+		Control? focus = record.Frame.GetViewport().GuiGetFocusOwner();
+		if (focus != null && focus != record.Frame && !record.Frame.IsAncestorOf(focus))
+			focus.ReleaseFocus();
 		foreach (WindowRecord other in _windows.Values)
 		{
 			other.TaskbarButton.Modulate = other.Id == id ? Colors.White : new Color("b4bec9");

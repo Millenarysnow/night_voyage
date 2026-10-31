@@ -16,6 +16,8 @@ public partial class BoardLinksView : Control
 	[Export] private float SecondaryDashLength { get; set; } = 4.0f;
 
 	private readonly List<Segment> _segments = new();
+	/// <summary>提供当前连线的只读视图，供布局诊断和连接端点验收使用。</summary>
+	public IReadOnlyList<Segment> Segments => _segments;
 
 	/// <summary>替换整组连接线并触发重绘，避免旧任务树的线段留在画布上。</summary>
 	public void SetSegments(IEnumerable<Segment> segments)
