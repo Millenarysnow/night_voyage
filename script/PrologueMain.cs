@@ -203,8 +203,8 @@ public partial class PrologueMain : Control
 	private void InitializeTaskbarReferences()
 	{
 		if (_desktopContent == null) return;
-		_playerLabel = _desktopContent.GetNodeOrNull<Label>("Taskbar/PlayerName");
-		_clockLabel = _desktopContent.GetNodeOrNull<Label>("Taskbar/Clock");
+		_playerLabel = _desktopContent.GetNodeOrNull<Label>("Taskbar/SystemGroup/PlayerName");
+		_clockLabel = _desktopContent.GetNodeOrNull<Label>("Taskbar/SystemGroup/Clock");
 	}
 
 	/// <summary>从聊天窗场景缓存消息列表、输入框和联系人状态节点。</summary>

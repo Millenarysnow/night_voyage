@@ -32,13 +32,32 @@ public partial class DesktopUiRegressionTest : Node
 			_desktop = _main.GetNode<Control>("PrologueDesktop/CRTViewport/ContentViewport/Content/DesktopContent");
 			_contentViewport = _desktop.GetViewport() as SubViewport ?? throw new InvalidOperationException("桌面没有使用预期的子视口。");
 			ValidateToastLayout();
+			ValidateTaskbarGroup();
 			await Capture("desktop-toast-regression.png");
+			// 覆盖截图中的单字符名字和登录页允许的最长中文名字，检查紧凑排版也能完整显示。
+			Label playerName = _desktop.GetNode<Label>("Taskbar/SystemGroup/PlayerName");
+			string originalName = playerName.Text;
+			playerName.Text = "1";
+			await Frames();
+			ValidateTaskbarGroup();
+			playerName.Text = new string('名', 12);
+			await Frames();
+			ValidateTaskbarGroup();
+			await Capture("desktop-taskbar-long-name.png");
+			playerName.Text = originalName;
+			await Frames();
 			Panel chat = Window("chat");
 			Panel board = Window("board");
 			_canvas = board.GetNode<BoardCanvasView>("Body/BoardContentRoot/BoardCanvas");
 			// 解锁流程已经打开暗线并启动对白，后续只等待真实队列完成。
 			await Delay(2.5);
 			ValidateChatRows();
+			// 同时保留普通态与聚焦态的实际桌面图，避免默认主题只在失焦后露出突兀的黑色输入框。
+			LineEdit chatInput = chat.GetNode<LineEdit>("Body/ChatContent/InputPanel/ChatInput");
+			await Capture("desktop-chat-focused.png");
+			chatInput.ReleaseFocus();
+			await Capture("desktop-chat-unfocused.png");
+			chatInput.GrabFocus();
 
 			_main.Call("ShowWindow", "board");
 			await Delay(0.4);
@@ -180,6 +199,29 @@ public partial class DesktopUiRegressionTest : Node
 		Rect2 rect = toast.GetGlobalRect();
 		Expect(rect.Size.X <= 320.0f && rect.Position.X >= 900.0f && rect.End.X <= _contentViewport.Size.X,
 			"通知卡片完整显示在屏幕右下方，不会被拉伸成横条。");
+	}
+
+	/// <summary>用户名、状态图标和时钟由同一行容器排版，成员之间只保留统一的小间距。</summary>
+	private void ValidateTaskbarGroup()
+	{
+		HBoxContainer group = _desktop.GetNode<HBoxContainer>("Taskbar/SystemGroup");
+		Label player = group.GetNode<Label>("PlayerName");
+		Control tray = group.GetNode<Control>("SystemTray");
+		Control clock = group.GetNode<Control>("Clock");
+		Rect2 playerRect = player.GetGlobalRect();
+		Rect2 trayRect = tray.GetGlobalRect();
+		Rect2 clockRect = clock.GetGlobalRect();
+		float playerTrayGap = trayRect.Position.X - playerRect.End.X;
+		float trayClockGap = clockRect.Position.X - trayRect.End.X;
+		// 只检查控件存在会漏掉 clip_text 导致的零宽标签，必须按当前字体量取实际名字宽度。
+		float nameWidth = player.GetThemeFont("font").GetStringSize(player.Text,
+			fontSize: player.GetThemeFontSize("font_size")).X;
+		Expect(player.Visible && playerRect.Size.X >= nameWidth - 0.1f && playerTrayGap >= -0.1f && playerTrayGap <= 10.1f,
+			"任务栏用户名与系统状态图标相邻排列。");
+		Expect(trayClockGap >= -0.1f && trayClockGap <= 10.1f,
+			"系统状态图标与时钟保持同组间距。");
+		Expect(clockRect.End.X <= _contentViewport.Size.X && playerRect.Position.X >= 0.0f,
+			"不同长度的用户名不会把右下角状态组挤出屏幕。");
 	}
 
 	/// <summary>从真实桌面窗口层读取应用窗口，避免为测试创建替代外壳。</summary>
