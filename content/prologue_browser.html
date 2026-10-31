@@ -89,7 +89,13 @@
 
     function renderSearch() {
       const results = snapshot?.search_results ?? [];
-      app.innerHTML = `<p class="hint">${results.length ? "搜索结果" : "没有找到相关结果"}</p>${results.length ? results.map(resultCard).join("") : `<div class="empty">换一个关键词试试。</div>`}`;
+      const milestones = snapshot?.milestones ?? {};
+      const forumLocked = snapshot?.search_scope === "forum" &&
+        (!milestones.article_text_collected || !milestones.article_image_collected);
+      const emptyMessage = forumLocked
+        ? "先在全网打开寻猫启事，并将正文摘录和照片收进白板，暗涌论坛里才会出现目击帖。"
+        : "换一个关键词试试。";
+      app.innerHTML = `<p class="hint">${results.length ? "搜索结果" : "没有找到相关结果"}</p>${results.length ? results.map(resultCard).join("") : `<div class="empty">${emptyMessage}</div>`}`;
     }
 
     function renderArticle() {
@@ -202,7 +208,8 @@
               article_text_collected: snapshot.milestones.article_text_collected,
               article_image_collected: snapshot.milestones.article_image_collected,
               article_image_width: document.querySelector(".page img.photo")?.naturalWidth ?? 0,
-              forum_image_width: document.querySelector(".post img.photo")?.naturalWidth ?? 0
+              forum_image_width: document.querySelector(".post img.photo")?.naturalWidth ?? 0,
+              empty_message: document.querySelector("#app .empty")?.textContent ?? ""
             })));
         }
       } catch (error) {

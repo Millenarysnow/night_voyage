@@ -142,19 +142,19 @@ public partial class PrologueBrowserIntegrationTest : Control
 		}
 		else if (action == "open_article")
 		{
-			DispatchAndReturn(action, payload, "article_opened", 5);
+			DispatchAndReturn(action, payload, "article_opened", 6);
 		}
 		else if (action == "open_forum")
 		{
-			DispatchAndReturn(action, payload, "forum_opened", 9);
+			DispatchAndReturn(action, payload, "forum_opened", 10);
 		}
 		else if (action == "open_result")
 		{
-			DispatchAndReturn(action, payload, "result_opened", 2);
+			DispatchAndReturn(action, payload, "result_opened", 3);
 		}
 		else if (action == "browser_navigate")
 		{
-			DispatchAndReturn(action, payload, "browser_navigated", 3);
+			DispatchAndReturn(action, payload, "browser_navigated", 4);
 		}
 		else if (action == "collect_clue")
 		{
@@ -177,46 +177,52 @@ public partial class PrologueBrowserIntegrationTest : Control
 		switch (_step)
 		{
 			case 0:
-				Eval("document.getElementById('query').value = '猫'; document.getElementById('searchForm').requestSubmit();");
+				Eval("document.querySelector('[data-scope=\"forum\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
 				break;
 			case 1:
+				Expect(page == "forum_results", "前置线索未收齐时仍能进入论坛搜索结果页。");
+				Expect(Get(message, "empty_message", "").AsString().Contains("正文摘录和照片收进白板"),
+					"论坛尚未解锁时明确提示需要先收录启事正文和照片。");
+				Eval("document.querySelector('[data-scope=\"web\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
+				break;
+			case 2:
 				Expect(page == "search_results", "泛搜结果仍停留在搜索结果页面。");
 				Eval("document.querySelector('[data-action=\"open_result\"]').click();");
 				break;
-			case 2:
+			case 3:
 				Expect(page == "web_result", "泛搜结果可以打开普通网页。");
 				Eval("document.querySelector('[data-page=\"search_results\"]').click();");
 				break;
-			case 3:
+			case 4:
 				Expect(page == "search_results", "普通网页可以返回泛搜结果。");
 				Eval("document.getElementById('query').value = '年糕'; document.getElementById('searchForm').requestSubmit();");
 				break;
-			case 4:
+			case 5:
 				Eval("document.querySelector('[data-action=\"open_article\"]').click();");
 				break;
-			case 5:
+			case 6:
 				Expect(page == "article", "年糕搜索结果打开了寻猫启事页面。");
 				Expect(Get(message, "article_image_width", 0).AsInt32() > 0, "启事照片从项目内本地资源成功显示。");
 				Eval("(()=>{const p=document.querySelector('.paper p'); const r=document.createRange(); r.selectNodeContents(p); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); setTimeout(()=>document.getElementById('collectSelection').click(),0);})();");
 				break;
-			case 6:
+			case 7:
 				Expect(Get(message, "article_text_collected", false).AsBool(), "玩家选中的启事文字已进入白板快照。");
 				Eval("document.querySelector('.page img.photo').click();");
 				break;
-			case 7:
+			case 8:
 				Expect(Get(message, "article_image_collected", false).AsBool(), "玩家确认收录后启事照片已进入白板快照。");
 				Eval("document.querySelector('[data-scope=\"forum\"]').click(); document.getElementById('query').value='猫'; document.getElementById('searchForm').requestSubmit();");
 				break;
-			case 8:
+			case 9:
 				Expect(page == "forum_results", "论坛搜索切换到了论坛结果页面。");
 				Eval("document.querySelector('[data-action=\"open_forum\"]').click();");
 				break;
-			case 9:
+			case 10:
 				Expect(page == "forum_post", "论坛搜索结果打开了目击帖页面。");
 				Expect(Get(message, "forum_image_width", 0).AsInt32() > 0, "论坛照片从项目内本地资源成功显示。");
 				Eval("(()=>{const p=document.querySelector('.post .body'); const r=document.createRange(); r.selectNodeContents(p); const s=window.getSelection(); s.removeAllRanges(); s.addRange(r); document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true})); setTimeout(()=>document.getElementById('collectSelection').click(),0);})();");
 				break;
-			case 10:
+			case 11:
 				Expect(Get(message, "clue_count", 0).AsInt32() == 3, "启事文字、启事照片和论坛目击文字均由玩家收录。");
 				CompleteTest();
 				break;
@@ -230,26 +236,35 @@ public partial class PrologueBrowserIntegrationTest : Control
 		string scope = Get(payload, "scope", "").AsString();
 		if (_step == 0)
 		{
+			Expect(query == "猫" && scope == "forum", "玩家在尚未收齐启事线索时尝试搜索论坛猫帖。");
+			Dictionary result = Dispatch("search", payload, "search_completed");
+			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
+			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 0,
+				"啟事正文和照片未收錄前不提前洩露論壇目擊帖。");
+			ReturnSnapshot(1);
+		}
+		else if (_step == 1)
+		{
 			Expect(query == "猫" && scope == "web", "网页提交了全网猫字搜索。");
 			Dictionary result = Dispatch("search", payload, "search_completed");
 			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
 			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 3,
 					"C++ 将猫字泛化搜索判成三个无关结果。");
-			ReturnSnapshot(1);
+			ReturnSnapshot(2);
 		}
-		else if (_step == 3)
+		else if (_step == 4)
 		{
 			Expect(query == "年糕" && scope == "web", "网页再次搜索了年糕。");
-			DispatchAndReturn("search", payload, "search_completed", 4);
+			DispatchAndReturn("search", payload, "search_completed", 5);
 		}
-		else if (_step == 7)
+		else if (_step == 8)
 		{
 			Expect(query == "猫" && scope == "forum", "收录启事文字和照片后搜索了论坛猫帖。");
 			Dictionary result = Dispatch("search", payload, "search_completed");
 			Dictionary snapshot = Get(result, "snapshot", new Dictionary()).AsGodotDictionary();
 			Expect(Get(snapshot, "search_results", new Godot.Collections.Array()).AsGodotArray().Count == 1,
 					"C++ 只返回一个论坛目击帖。");
-			ReturnSnapshot(8);
+			ReturnSnapshot(9);
 		}
 	}
 
@@ -258,7 +273,7 @@ public partial class PrologueBrowserIntegrationTest : Control
 	{
 		string page = Get(payload, "page", "").AsString();
 		Dictionary result = Dispatch("collect_clue", payload, "clue_collected");
-		ReturnSnapshot(page == "article" ? 6 : 10);
+		ReturnSnapshot(page == "article" ? 7 : 11);
 	}
 
 	/// <summary>照片点击先打开原生预览；测试再模拟玩家按下预览中的收录按钮。</summary>
@@ -270,7 +285,7 @@ public partial class PrologueBrowserIntegrationTest : Control
 			["page"] = "article",
 			["kind"] = "image",
 		}, "clue_collected");
-		ReturnSnapshot(7);
+		ReturnSnapshot(8);
 	}
 
 	/// <summary>执行操作并检查业务操作码，避免页面只收到无条件成功回执。</summary>
