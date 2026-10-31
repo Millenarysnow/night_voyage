@@ -31,6 +31,8 @@ public partial class DesktopUiRegressionTest : Node
 			await Delay(0.8);
 			_desktop = _main.GetNode<Control>("PrologueDesktop/CRTViewport/ContentViewport/Content/DesktopContent");
 			_contentViewport = _desktop.GetViewport() as SubViewport ?? throw new InvalidOperationException("桌面没有使用预期的子视口。");
+			ValidateToastLayout();
+			await Capture("desktop-toast-regression.png");
 			Panel chat = Window("chat");
 			Panel board = Window("board");
 			_canvas = board.GetNode<BoardCanvasView>("Body/BoardContentRoot/BoardCanvas");
@@ -164,6 +166,20 @@ public partial class DesktopUiRegressionTest : Node
 		}
 		Expect(noOverlap, "连续聊天消息按照实际高度排列，不互相覆盖。");
 		Expect(containsText, "气泡和消息行完整包含实际换行的文字。");
+	}
+
+	/// <summary>解锁后的真实通知必须保持场景配置的右下角宽度，不得横跨桌面形成灰色条带。</summary>
+	private void ValidateToastLayout()
+	{
+		VBoxContainer toasts = _desktop.GetNode<VBoxContainer>("Toasts");
+		Expect(toasts.Size.X <= 320.0f && toasts.GetGlobalRect().Position.X >= 900.0f,
+			"解锁通知容器保持在桌面右下角的固定宽度。");
+		Expect(toasts.GetChildCount() == 1, "真实解锁流程创建了一条欢迎通知。");
+		if (toasts.GetChildCount() == 0) return;
+		Control toast = (Control)toasts.GetChild(0);
+		Rect2 rect = toast.GetGlobalRect();
+		Expect(rect.Size.X <= 320.0f && rect.Position.X >= 900.0f && rect.End.X <= _contentViewport.Size.X,
+			"通知卡片完整显示在屏幕右下方，不会被拉伸成横条。");
 	}
 
 	/// <summary>从真实桌面窗口层读取应用窗口，避免为测试创建替代外壳。</summary>

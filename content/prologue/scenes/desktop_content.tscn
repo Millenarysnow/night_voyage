@@ -70,7 +70,8 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="Toasts" type="VBoxContainer" parent="."]
-anchors_preset = 10
+anchors_preset = 3
+anchor_left = 1.0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
